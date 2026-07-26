@@ -1,0 +1,47 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---- Operator working files (per-engagement, NEVER commit) ----
+# Your real findings + rendered client deliverables. findings.example.json IS tracked as the template.
+findings.json
+report.md
+report.docx
+report.pdf
+*.cleanup.md
+engagement.log
+typescript
+
+# ---- Loot / evidence (may contain client data or credentials) ----
+loot/
+runs/
+*.ccache
+*.kirbi
+*.pfx
+*.ntds
+*.secrets
+hashes.txt
+shadow-hash
+sam.hive
+system.hive
+
+# ---- Supplied binaries (bring-your-own; see SUPPLIED-BINARIES.md) ----
+*.exe
+*.dll
+*.sys
+*.msi
+*.jar
+
+# ---- Build artifacts from the generators ----
+*.o
+*.so
+*.out
+# gen_msi.py writes evil.wxs next to itself
+*.wxs
+# gen_preload.py default output
+pre.c
+s.php
+sh.sh
