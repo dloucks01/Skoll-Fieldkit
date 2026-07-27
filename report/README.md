@@ -65,6 +65,18 @@ The report is only as trustworthy as the output you paste — so capture it, don
 Valid `vector_type` values are listed in the `--init` template (`_valid_vector_types`) and in `_report_kb.py`.
 Unknown types fall back to a generic entry — prefer adding a proper KB entry so the remediation is specific.
 
+## Feed findings back to recce (the enumeration/reporting tool)
+
+If you enumerated with [**recce**](https://github.com/dloucks01/recce), fold your proven findings back
+into its workbook + report so the engagement has one source of truth:
+```bash
+python3 gen_report.py findings.json --export-recce      # -> recce_findings.json (KB-enriched)
+#   then, in the recce checkout:  recce skoll-import recce_findings.json -o <engagement>
+```
+`--export-recce` resolves each finding's severity/CWE/remediation/risk from `_report_kb.py` and parses
+the host IP out of `affected_host`, so recce imports it with no copy of this KB. See the repo-root
+**[`INTEGRATION.md`](../INTEGRATION.md)** for the full round-trip (recce → Sköll seeding included).
+
 ## Reporting principle
 The kit reports **every** proven escalation path per host, ordered most-severe first — not just the first
 one exploited. Each path is an independent risk the customer must remediate, so each gets its own writeup

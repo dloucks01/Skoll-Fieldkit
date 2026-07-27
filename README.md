@@ -65,6 +65,12 @@ python3 gen_report.py findings.json --cleanup             # INTERNAL artifact-re
 - **Configure once** per engagement in each `_*_common.py` (`LHOST`/`LPORT`/`TOOL`/`STAGE`/`REVTYPE`); hardened
   targets use `--stagedir` (noexec `/tmp`) and `--revtype` (dash/Constrained-Language-Mode).
 
+## Companion: recce (enumeration + reporting)
+Pairs with [**recce**](https://github.com/dloucks01/recce), which does the enumeration/reporting half of the
+engagement. `recce skoll-export` seeds Sköll's mass triage (`sweep.py triage --recce`) with the hosts it already
+found *and confirmed vulnerable*; `gen_report.py findings.json --export-recce` → `recce skoll-import` folds your
+proven findings back into recce's workbook + report. See **[`INTEGRATION.md`](INTEGRATION.md)**.
+
 ## Scope
 A full **authorized-pentest** funnel: initial access (network/creds/CVE/AD/cloud · web · services) → foothold →
 novel binary vuln research → local privilege escalation → reporting. **Deliberately out of scope:** phishing /
