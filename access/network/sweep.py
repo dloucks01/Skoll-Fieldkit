@@ -116,7 +116,8 @@ elif arg == "triage":
                 if p.get("port"): h["ports"].add(int(p["port"]))
             if e.get("null_smb"): null_shares.add(ip)
             recce[ip] = {"os": e.get("os", ""), "roles": e.get("roles", []),
-                         "findings": e.get("findings", []), "access": e.get("access_gained", False)}
+                         "findings": e.get("findings", []), "access": e.get("access_gained", False),
+                         "exploit_cmds": e.get("exploit_cmds", []), "access_cmds": e.get("access_cmds", [])}
     # score each host = best (lowest) win among its ports; a recce-confirmed critical/high wins hard.
     rows = []
     for ip, h in hosts.items():
@@ -146,6 +147,11 @@ elif arg == "triage":
             print(f"    {'CONFIRM':<6}{('['+f.get('severity','?').upper()+']'):<12}{f.get('title','')}{cves}")
         for _, p, (label, note, _j) in wins:
             print(f"    {p:<6}{label:<12}{note}")
+        for e in info.get("exploit_cmds", []):
+            cve = ("  # recce confirmed " + ", ".join(e["cves"])) if e.get("cves") else ""
+            print(f"    {'ver→cve':<6}{'':<12}{e.get('cmd','')}{cve}")
+        for c in info.get("access_cmds", []):
+            print(f"    {'cred':<6}{'':<12}{c}")
     print(f"\n# -> ok: hosts are ranked top-down; the top rows are the exposed-RCE/unauth quick-wins to hit first.")
     print(f"# work the top of the list first (0=exposed-RCE/unauth, higher=needs-creds).")
     if rc:
