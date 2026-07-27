@@ -42,13 +42,24 @@ python3 access/network/sweep.py triage --nmap eng/skoll/ports.gnmap --nxc eng/sk
 
 | File in `eng/skoll/` | What it is | Consumed by |
 |---|---|---|
-| `recce-bridge.json` | ports + service/version + recce's **confirmed** findings + suggested generator per host | `sweep.py triage --recce` (richest) |
+| `recce-bridge.json` | ports + service/version + recce's **confirmed** findings + suggested generator + ready `gen_exploit`/`gen_shell`/`gen_spray` commands per host | `sweep.py triage --recce` (richest) |
 | `ports.gnmap` | synthesized nmap-greppable (`-oG`) | `sweep.py triage --nmap` (zero-change path) |
 | `smb-null.txt` | netexec-style lines for null/anonymous SMB hosts | `sweep.py triage --nxc` |
+| `users.txt` | usernames recce enumerated (machine accounts dropped) | `gen_spray.py --users users.txt` |
+| `creds.txt` | credentials recce captured (`domain/user:secret` / `hash:`) | `gen_shell.py` (reference) |
 | `SKOLL.md` | human, severity-ranked "run **this** on **that** host, because …" plan | you |
 
-From the scoreboard, run the named generator per host (`services/gen_smb.py`, `access/gen_shell.py`,
-`services/gen_db.py --db redis`, …) exactly as you would normally.
+`sweep.py triage --recce` prints, under each host, not just the port→generator route but recce's
+**confirmed** findings and ready-to-paste commands it derived from what it enumerated:
+
+- **`ver→cve`** — `gen_exploit.py find --service <p> --version <v>` for each service recce fingerprinted
+  (any confirmed CVEs noted inline), so you jump straight from a known version to candidate exploits.
+- **`cred`** — `gen_shell.py …` for each known credential that applies to the host, plus a
+  `gen_spray.py --users users.txt …` line — the `users.txt` / `creds.txt` above are the material they use.
+
+Run the named generator per host (`services/gen_smb.py`, `access/gen_shell.py`,
+`services/gen_db.py --db redis`, …) as usual — the recce lines just pre-fill the target, service,
+version, and credentials so you paste instead of retype.
 
 ## 2. Sköll → recce: fold proven findings back into the sheet + report
 
