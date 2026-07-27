@@ -14,26 +14,26 @@ whoami /priv
 echo.
 
 echo ===== [ROUTE 1] SeImpersonate / SeAssignPrimaryToken  (Potato -^> SYSTEM) =====
-whoami /priv | findstr /i "SeImpersonatePrivilege SeAssignPrimaryTokenPrivilege" >nul && (set /a HITS+=1 & echo   ==^> [#!HITS!] winpriv.py --fire   ^(one paste: stage every Potato -^> scan -^> fire SYSTEM revshell^) & echo        fallback: gen_full.py ^| gen_forma.py ^| gen_nonet.py   ^(only if winpriv.py doesn't fit^)) || echo   (not held)
+whoami /priv | findstr /i "SeImpersonatePrivilege SeAssignPrimaryTokenPrivilege" >nul && (set /a HITS+=1 & echo   ==^> [#!HITS!] winpriv.py --fire   ^(one paste: stage every Potato -^> scan -^> fire SYSTEM revshell^) & echo        fallback: gen_full.py ^| gen_forma.py ^| gen_nonet.py   ^(only if winpriv.py doesn't fit^)) || echo   ^(not held^)
 echo.
 
 echo ===== [ROUTE 4] SeBackup / SeRestore / Backup Operators  (hive dump) =====
-whoami /priv   | findstr /i "SeBackupPrivilege SeRestorePrivilege" >nul && (set /a HITS+=1 & echo   ==^> [#!HITS!] gen_hashdump.py) || echo   (priv not held)
+whoami /priv   | findstr /i "SeBackupPrivilege SeRestorePrivilege" >nul && (set /a HITS+=1 & echo   ==^> [#!HITS!] gen_hashdump.py) || echo   ^(priv not held^)
 whoami /groups | findstr /i "Backup Operators" >nul               && (set /a HITS+=1 & echo   ==^> [#!HITS!] in Backup Operators: gen_hashdump.py)
 echo.
 
 echo ===== [gen_creds] SeDebug  (LSASS dump) =====
-whoami /priv | findstr /i "SeDebugPrivilege" >nul && (set /a HITS+=1 & echo   ==^> [#!HITS!] gen_creds.py --mode lsass) || echo   (not held)
+whoami /priv | findstr /i "SeDebugPrivilege" >nul && (set /a HITS+=1 & echo   ==^> [#!HITS!] gen_creds.py --mode lsass) || echo   ^(not held^)
 echo.
 
 echo ===== [gen_winexploit] other dangerous privileges =====
-whoami /priv | findstr /i "SeLoadDriverPrivilege SeTakeOwnershipPrivilege SeManageVolumePrivilege SeTcbPrivilege SeCreateTokenPrivilege" >nul && (set /a HITS+=1 & echo   ==^> [#!HITS!] gen_winexploit.py map  ^(names the route per privilege^)) || echo   (none held)
+whoami /priv | findstr /i "SeLoadDriverPrivilege SeTakeOwnershipPrivilege SeManageVolumePrivilege SeTcbPrivilege SeCreateTokenPrivilege" >nul && (set /a HITS+=1 & echo   ==^> [#!HITS!] gen_winexploit.py map  ^(names the route per privilege^)) || echo   ^(none held^)
 echo.
 
 echo ===== [ROUTE 5] AlwaysInstallElevated  (need BOTH keys = 0x1) =====
 set _AIE=
 reg query "HKLM\Software\Policies\Microsoft\Windows\Installer" /v AlwaysInstallElevated 2>nul | findstr /i "0x1" >nul && reg query "HKCU\Software\Policies\Microsoft\Windows\Installer" /v AlwaysInstallElevated 2>nul | findstr /i "0x1" >nul && set _AIE=1
-if defined _AIE (set /a HITS+=1 & echo   ==^> [#!HITS!] gen_msi.py) else (echo   (not both set - route closed))
+if defined _AIE (set /a HITS+=1 & echo   ==^> [#!HITS!] gen_msi.py) else (echo   ^(not both set - route closed^))
 echo.
 
 echo ===== [ROUTE 2] services: unquoted paths / non-Windows services (eyeball a space + no quotes) =====
@@ -49,7 +49,7 @@ echo   note: a svc/task calling a RELATIVE binary + a writable %%PATH%% dir -^> 
 echo.
 
 echo ===== [UAC] are we a (filtered) local admin? =====
-whoami /groups | findstr /i "S-1-5-32-544" >nul && (set /a HITS+=1 & echo   ==^> [#!HITS!] in Administrators: if medium-integrity, gen_uac.py) || echo   (not a local admin)
+whoami /groups | findstr /i "S-1-5-32-544" >nul && (set /a HITS+=1 & echo   ==^> [#!HITS!] in Administrators: if medium-integrity, gen_uac.py) || echo   ^(not a local admin^)
 echo.
 
 echo ===== [gen_creds --mode hunt] quick stored-cred spots =====
