@@ -6,6 +6,8 @@ generator that exploits it. Authorized scope ONLY — this scans your defined en
 
 Usage:
   python3 sweep.py plan   --targets targets.txt                 # print the mass-scan commands
+  python3 sweep.py plan   --targets targets.txt --oneshot       # emit ONE runnable mass-scan.sh
+      #   ... --oneshot > mass-scan.sh && sh mass-scan.sh        # one kickoff, whole scope
   python3 sweep.py triage --nmap ports.gnmap [--nxc smb.txt]    # parse -> scoreboard (focus list)
   python3 sweep.py triage --recce recce-bridge.json             # use recce's enumeration + CONFIRMED
                                                                  #   findings (from `recce skoll-export`)
@@ -52,9 +54,53 @@ WINS = {
     25:   ("smtp",        "user-enum/relay: services/gen_remote.py smtp",                    3),
 }
 
+if arg == "plan" and "--oneshot" in sys.argv:
+    # ONE kickoff for the whole scope: print a single runnable script that chains every
+    # mass-scannable step. Skoll stays print-only — you save + run it:
+    #   python3 sweep.py plan --targets scope.txt --oneshot > mass-scan.sh && sh mass-scan.sh
+    tf = opt("--targets", "targets.txt")
+    print(f"""#!/bin/sh
+# MASS TRIAGE — one kickoff across the whole scope ({tf}). AUTHORIZED SCOPE ONLY.
+# Chains: live-host discovery -> port scan -> SMB null-session sweep -> web/CVE sweep ->
+# service/version. Tool-tolerant (skips a step whose tool is absent). Outputs feed
+# `sweep.py triage` and recce. Run:  sh mass-scan.sh
+set -u
+TARGETS="{tf}"
+have(){{ command -v "$1" >/dev/null 2>&1; }}
+[ -f "$TARGETS" ] || {{ echo "!! $TARGETS not found (one IP/host/CIDR per line)"; exit 1; }}
+
+echo "== 1/5 live hosts =="
+if have nmap; then nmap -sn -iL "$TARGETS" -oG live.gnmap >/dev/null 2>&1; grep -a Up live.gnmap | cut -d' ' -f2 > live.txt; else cp "$TARGETS" live.txt; fi
+echo "   $(wc -l < live.txt 2>/dev/null) live host(s) -> live.txt"
+
+echo "== 2/5 port scan (this is the file triage parses) =="
+if have masscan; then masscan -iL live.txt -p1-65535 --rate 5000 -oG ports.gnmap >/dev/null 2>&1
+elif have nmap; then nmap -Pn -iL live.txt --top-ports 200 --open --min-rate 2000 -oG ports.gnmap >/dev/null 2>&1
+else echo "   (no masscan/nmap - skipped)"; fi
+
+echo "== 3/5 SMB sweep (null session + signing + relay list) =="
+if have nxc; then nxc smb live.txt > smb.txt 2>&1; nxc smb live.txt --shares -u '' -p '' >> smb.txt 2>&1; nxc smb live.txt --gen-relay-list relay_targets.txt >/dev/null 2>&1
+else echo "   (nxc/netexec absent - skipped)"; fi
+
+echo "== 4/5 web + known-CVE sweep =="
+grep -aE '(:| )(80|443|8080|8443)/open' ports.gnmap 2>/dev/null | cut -d' ' -f2 | sort -u > web.txt
+have httpx  && httpx  -l web.txt -title -tech-detect -sc -o web_httpx.txt >/dev/null 2>&1
+have nuclei && nuclei -l web.txt -severity critical,high -o nuclei.txt >/dev/null 2>&1
+
+echo "== 5/5 service/version (for CVE matching) =="
+have nmap && nmap -Pn -sCV -iL live.txt --open -oA services >/dev/null 2>&1
+
+echo
+echo "DONE. Next:"
+echo "  python3 access/network/sweep.py triage --nmap ports.gnmap --nxc smb.txt"
+echo "  (or fold into recce:  recce import services.xml -o eng)"
+""")
+    sys.exit(0)
+
 if arg == "plan":
     tf = opt("--targets", "targets.txt")
     print(f"# MASS TRIAGE plan for {tf}. Run top-to-bottom (each step feeds the next); outputs feed `sweep.py triage`.")
+    print(f"#   ( one kickoff instead of the steps below:  python3 sweep.py plan --targets {tf} --oneshot > mass-scan.sh && sh mass-scan.sh )")
     print(f"# needs: {tf} = your authorized scope, one IP/host/CIDR per line (<x> = you supply this file).\n")
     print(f"# 1) live hosts (skip if you already know they're up):")
     print(f"nmap -sn -iL {tf} -oG live.gnmap; grep Up live.gnmap | cut -d' ' -f2 > live.txt")
