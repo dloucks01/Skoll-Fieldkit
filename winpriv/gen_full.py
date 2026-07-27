@@ -1,7 +1,18 @@
 #!/usr/bin/env python3
 """Variant A -- HTTP cradle (egress open, ONE line).
+
+>>> Most operators should use `winpriv.py --fire` instead: it stages, scans, and
+>>> fires the SYSTEM revshell in ONE paste, without editing _winpriv_common.py.
+>>> This script (gen_full.py) is a fallback for the rare case where you specifically
+>>> need in-memory reflective load (no disk touch). See ../CHEATSHEET.md.
+
 AMSI byte-patch + reflective load of the Potato exe from your HTTP stager + invoke revshell-as-SYSTEM.
 Edit LHOST/LPORT/TOOL in _winpriv_common.py. Serve the exe (python3 -m http.server 80) + nc -lvnp first.
+
+NOTE: the AMSI bypass here is the 2020-vintage S3cur3Th1sSh1t byte-patch, which
+current Defender heavily signatures. On any updated Windows 10/11 / Server 2019+,
+expect this to be silently killed at AMSI-scan time (nothing reaches the wire).
+`winpriv.py --fire` runs native PEs which aren't AMSI-scanned and survives cleanly.
 
 Usage: python3 gen_full.py
 """

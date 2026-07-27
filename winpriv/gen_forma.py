@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
 """Variant C -- no-network ON-DISK (Form A, most robust: no AMSI, no reflection).
+
+>>> Most operators should use `winpriv.py --fire` instead: it does the same on-disk
+>>> certutil stage + Potato invoke, but for EVERY Potato in your dir at once, picks
+>>> the winner, and fires the SYSTEM revshell -- ONE paste, no _winpriv_common.py edits.
+>>> This script (gen_forma.py) is a fallback for when you already know the exact TOOL
+>>> and just want the bare paste sequence. See ../CHEATSHEET.md.
+
 Stage the Potato exe to DISK via certutil, then run it with the per-tool SYSTEM command
 (revshell folded in) so the callback lands AS SYSTEM. On-disk PEs aren't AMSI-scanned.
 Edit LHOST/LPORT/TOOL in _winpriv_common.py.

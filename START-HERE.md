@@ -32,7 +32,7 @@ It ranks every host by quick-win and **names the exact module/generator per host
 ## 2. After you have a shell — escalate
 | Shell on… | Module | First step |
 |---|---|---|
-| Windows | **`winpriv/`** | paste `winpriv/enum.bat` (it names the route) |
+| Windows | **`winpriv/`** | **`winpriv/winpriv.py --fire`** = one paste → SYSTEM shell (see [winpriv/CHEATSHEET.md § Quick Start](winpriv/CHEATSHEET.md)) · or paste `winpriv/enum.bat` first for the full route map |
 | Linux | **`linpriv/`** | run `linpriv/enum.sh` (it names the route) |
 
 ## 3. Write it up

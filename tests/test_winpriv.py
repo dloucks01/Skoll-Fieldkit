@@ -1,4 +1,4 @@
-"""Smoke tests for winpriv/gen_potato_scan.py -- the auto-stage+scan generator that
+"""Smoke tests for winpriv/winpriv.py -- the auto-stage+scan generator that
 emits a batch script probing every Potato variant.
 
 The generator is print-only, so we drive it via subprocess and assert on the emitted
@@ -11,7 +11,7 @@ import tempfile
 import unittest
 
 WINPRIV = os.path.join(os.path.dirname(__file__), "..", "winpriv")
-SCAN = os.path.join(WINPRIV, "gen_potato_scan.py")
+SCAN = os.path.join(WINPRIV, "winpriv.py")
 
 
 def _run(*args, expect_ok=True):
@@ -192,6 +192,39 @@ class GenPotatoScan_Fire(unittest.TestCase):
             self.assertNotIn("STAGE nc.exe", out)
             self.assertIn("powershell -e", out)      # PS revshell b64 payload
             self.assertIn("(powershell callback)", out)
+
+    def test_fire_auto_detects_nc_mode_when_nc_exe_is_in_potatoes_dir(self):
+        # Beginner UX: if nc.exe is in --potatoes, --revtype defaults to nc without
+        # the operator having to say so (a native callback avoids AMSI in the
+        # revshell path — the fix for gen_full's classic failure mode).
+        with tempfile.TemporaryDirectory() as d:
+            for n in ("EfsPotato.exe", "nc.exe"):
+                with open(os.path.join(d, n), "wb") as fh:
+                    fh.write(b"MZ" + b"\x00" * 2048)
+            out, _ = _run("--potatoes", d, "--fire")     # NO --revtype
+            self.assertIn("(nc callback)", out)
+            self.assertIn("STAGE nc.exe", out)
+
+    def test_fire_auto_uses_module_default_when_nc_not_present(self):
+        # No nc.exe locally -> fall back to _winpriv_common.REVTYPE (powershell
+        # in the shipped default).
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "EfsPotato.exe"), "wb") as fh:
+                fh.write(b"MZ" + b"\x00" * 2048)
+            out, _ = _run("--potatoes", d, "--fire")     # NO --revtype, NO nc.exe
+            self.assertIn("(powershell callback)", out)
+            self.assertNotIn("STAGE nc.exe", out)
+
+    def test_potatoes_flag_is_alias_for_serve_dir(self):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "EfsPotato.exe"), "wb") as fh:
+                fh.write(b"MZ" + b"\x00" * 2048)
+            a, _ = _run("--potatoes", d)
+            b, _ = _run("--serve-dir", d)
+            # Both flags must pick up the same local Potato -- byte-identical output
+            # would be brittle (paths in comments), so just check STAGE block presence:
+            self.assertIn("STAGE EfsPotato.exe", a)
+            self.assertIn("STAGE EfsPotato.exe", b)
 
     def test_fire_lhost_lport_override_flows_into_payload(self):
         # --lhost / --lport must override the module defaults in the fire payload.

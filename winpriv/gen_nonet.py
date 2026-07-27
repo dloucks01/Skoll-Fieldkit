@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
 """Variant B -- no-network FILELESS.
+
+>>> Most operators should use `winpriv.py --fire` instead. gen_nonet.py stays as
+>>> the fallback for the ONE scenario winpriv.py doesn't cover: egress is blocked
+>>> so you can't HTTP-fetch anything on target, AND you can't write to disk (weird
+>>> hardening / immutable filesystem). Then you carry the exe bytes over the SQL
+>>> channel as base64 and load reflectively. Uses the same AMSI byte-patch as
+>>> gen_full.py, so if Defender is up-to-date, this fails at AMSI-scan time too.
+>>> See ../CHEATSHEET.md.
+
 Stage the Potato exe's bytes as base64 through xp_cmdshell (chunked echo), then ONE fileless invoke line
 (AMSI byte-patch + FromBase64String + Assembly::Load + revshell-as-SYSTEM). The exe never touches disk.
 Edit LHOST/LPORT/TOOL in _winpriv_common.py.

