@@ -59,9 +59,13 @@ ls -la ~/.ssh 2>/dev/null; find / -name 'id_rsa' 2>/dev/null | head
 grep -rIE 'password|passwd|secret|api[_-]?key' /var/www /opt /home 2>/dev/null | head -15
 note "full sweep: gen_loot.py  |  exhaustive: gen_recon.py linpeas --fetch"
 
-echo "\n===== NETWORK (machine block — pipe this into recce: recce ingest <file>) ====="
-echo "# recce folds these into its OBSERVED-REACHABILITY map: this host's interfaces/"
-echo "# routes + the neighbours & live peers it actually reached (ground-truth lateral)."
+echo "\n===== NETWORK / ROUTING (this host) ====="
+echo "--- interfaces ---"; { ip -brief -4 addr 2>/dev/null || ifconfig -a 2>/dev/null; } | sed 's/^/  /'
+echo "--- routing table (gateways + the segments this host can reach) ---"
+{ ip route 2>/dev/null || netstat -rn 2>/dev/null || route -n 2>/dev/null; } | sed 's/^/  /'
+DGW="$(ip route 2>/dev/null | awk '/^default/{print $3; exit}')"; [ -n "$DGW" ] && echo "  default gateway: $DGW"
+[ "$(ip -o -4 addr show 2>/dev/null | grep -vc ' lo ')" -gt 1 ] 2>/dev/null && note "MULTIPLE interfaces/subnets -> this host is a PIVOT into another segment (see routes above)"
+echo "\n# --- machine block (recce folds this into its reachability + architecture map) ---"
 echo "==== NETWORK ===="
 if command -v ip >/dev/null 2>&1; then
   ip -o -4 addr show 2>/dev/null | awk '{print "NET-IFACE "$2" "$4}'

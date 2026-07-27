@@ -65,10 +65,15 @@ echo   note: feed systeminfo to wesng -^> gen_winexploit.py localkernel   ^| Pri
 echo.
 
 echo ====================================================================================
-echo ===== NETWORK (machine block -- pipe this into recce: recce ingest ^<file^>) =====
+echo ===== NETWORK / ROUTING (this host) =====
 echo ====================================================================================
-echo # recce folds these into its OBSERVED-REACHABILITY map (interfaces/routes + the
-echo # neighbours ^& live peers this host actually reached -- ground-truth lateral).
+echo --- interfaces ---
+ipconfig ^| findstr /i /c:"adapter" /c:"IPv4" /c:"Subnet" /c:"Default Gateway"
+echo --- routing table (gateways + the segments this host can reach) ---
+route print -4 2>nul ^| findstr /r /c:"Network Destination" /c:"^ *[0-9]"
+echo --- ARP neighbours (hosts this box has actually talked to) ---
+arp -a 2>nul ^| findstr /r /c:"^  [1-9]"
+echo # --- machine block (recce folds this into its reachability + architecture map) ---
 echo ==== NETWORK ====
 where powershell >nul 2>&1
 if !errorlevel!==0 (
