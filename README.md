@@ -66,7 +66,7 @@ python3 gen_report.py findings.json --cleanup             # INTERNAL artifact-re
 
 ## Companion: recce (enumeration + reporting)
 Pairs with [**recce**](https://github.com/dloucks01/recce), which does the enumeration/reporting half of the
-engagement. `recce skoll-export` seeds Sköll's mass triage (`sweep.py triage --recce`) with the hosts it already
+engagement. `recce skoll-export` seeds fieldkit's mass triage (`sweep.py triage --recce`) with the hosts it already
 found *and confirmed vulnerable*; `gen_report.py findings.json --export-recce` → `recce skoll-import` folds your
 proven findings back into recce's workbook + report. See **[`INTEGRATION.md`](INTEGRATION.md)**.
 

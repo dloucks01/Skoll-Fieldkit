@@ -56,7 +56,7 @@ WINS = {
 
 if arg == "plan" and "--oneshot" in sys.argv:
     # ONE kickoff for the whole scope: print a single runnable script that chains every
-    # mass-scannable step. Skoll stays print-only — you save + run it:
+    # mass-scannable step. fieldkit stays print-only — you save + run it:
     #   python3 sweep.py plan --targets scope.txt --oneshot > mass-scan.sh && sh mass-scan.sh
     tf = opt("--targets", "targets.txt")
     print(f"""#!/bin/sh

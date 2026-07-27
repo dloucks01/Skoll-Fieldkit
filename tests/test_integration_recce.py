@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Smoke tests for the recce <-> Sköll integration seams.
+"""Smoke tests for the recce <-> fieldkit integration seams.
 
-Sköll's generators are print-only scripts (no importable API), so these drive them
+fieldkit's generators are print-only scripts (no importable API), so these drive them
 the way an operator does — via subprocess — and assert on exit code + printed output.
 Covers the two integration points plus a regression check on the classic paths:
 
-  * report/gen_report.py --export-recce   (Sköll findings -> recce_findings.json)
+  * report/gen_report.py --export-recce   (fieldkit findings -> recce_findings.json)
   * report/gen_report.py --check          (anti-fabrication gate still gates)
   * access/network/sweep.py triage --recce (recce bridge -> ranked scoreboard)
   * access/network/sweep.py triage --nmap  (classic greppable path unbroken)
@@ -29,7 +29,7 @@ SWEEP = os.path.join(ROOT, "access", "network", "sweep.py")
 
 
 def run(script, *args):
-    """Run a Sköll script by path (its own dir lands on sys.path[0], so local
+    """Run a fieldkit script by path (its own dir lands on sys.path[0], so local
     imports like _report_kb resolve). Returns (returncode, stdout+stderr)."""
     p = subprocess.run([sys.executable, script, *args],
                        capture_output=True, text=True)

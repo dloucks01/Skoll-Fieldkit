@@ -75,7 +75,7 @@ python3 gen_report.py findings.json --export-recce      # -> recce_findings.json
 ```
 `--export-recce` resolves each finding's severity/CWE/remediation/risk from `_report_kb.py` and parses
 the host IP out of `affected_host`, so recce imports it with no copy of this KB. See the repo-root
-**[`INTEGRATION.md`](../INTEGRATION.md)** for the full round-trip (recce → Sköll seeding included).
+**[`INTEGRATION.md`](../INTEGRATION.md)** for the full round-trip (recce → fieldkit seeding included).
 
 ## Reporting principle
 The kit reports **every** proven escalation path per host, ordered most-severe first — not just the first

@@ -1,11 +1,11 @@
-# Sköll ⇄ recce — enumeration-driven exploitation, findings back to the sheet
+# fieldkit ⇄ recce — enumeration-driven exploitation, findings back to the sheet
 
-Sköll is the **exploitation** half of an engagement; [**recce**](https://github.com/dloucks01/recce)
+fieldkit is the **exploitation** half of an engagement; [**recce**](https://github.com/dloucks01/recce)
 is the **enumeration + reporting** half (multi-subnet nmap → one tracked Excel workbook + report).
 They round-trip cleanly, so you enumerate once and let each side feed the other:
 
 ```
-recce enum/vulns ──skoll-export──▶  Sköll sweep + generators  ──findings.json──▶ gen_report
+recce enum/vulns ──skoll-export──▶  fieldkit sweep + generators  ──findings.json──▶ gen_report
        ▲    ▲                                                                          │
        │    └── recce ingest ◀── linpriv/winpriv enum NET-* block (interfaces/routes) ─┤
        │        (topology → recce's reachability + architecture maps)                  │
@@ -14,12 +14,12 @@ recce enum/vulns ──skoll-export──▶  Sköll sweep + generators  ──f
 ```
 
 Both directions are **offline, deterministic, stdlib-only** — nothing here scans, connects, or
-executes. recce prints commands into a datastore; Sköll prints commands you paste. Authorized
+executes. recce prints commands into a datastore; fieldkit prints commands you paste. Authorized
 engagements only.
 
 ---
 
-## 1. recce → Sköll: turn enumeration into a focused attack plan
+## 1. recce → fieldkit: turn enumeration into a focused attack plan
 
 On the recce side, after `recce enum` / `recce vulns` (see recce's docs):
 
@@ -27,7 +27,7 @@ On the recce side, after `recce enum` / `recce vulns` (see recce's docs):
 recce skoll-export -o eng          # writes eng/skoll/
 ```
 
-That folder is the handoff. Copy it next to your Sköll checkout and feed **the richest one** into
+That folder is the handoff. Copy it next to your fieldkit checkout and feed **the richest one** into
 mass triage:
 
 ```bash
@@ -63,7 +63,7 @@ Run the named generator per host (`services/gen_smb.py`, `access/gen_shell.py`,
 `services/gen_db.py --db redis`, …) as usual — the recce lines just pre-fill the target, service,
 version, and credentials so you paste instead of retype.
 
-## 2. Sköll → recce: fold proven findings back into the sheet + report
+## 2. fieldkit → recce: fold proven findings back into the sheet + report
 
 Write up each **proven** finding in a `findings.json` the normal way (`gen_report.py --init`, fill in
 `steps` from your session capture), then in addition to the client report, emit the recce feed:
@@ -76,7 +76,7 @@ python3 report/gen_report.py findings.json --export-recce   # -> recce_findings.
 
 `--export-recce` resolves each finding's severity, CWE, remediation and risk from `_report_kb.py` and
 parses the host IP out of `affected_host`, into a self-contained `recce_findings.json` — recce needs
-no copy of Sköll's KB. Fold it in on the recce side:
+no copy of fieldkit's KB. Fold it in on the recce side:
 
 ```bash
 recce skoll-import recce_findings.json -o eng
@@ -88,11 +88,11 @@ marked *access-gained*. Re-importing is idempotent (deduped by title+host), so y
 prove each finding.
 
 > The engagement now has one source of truth: recce's workbook tracks coverage (what was enumerated)
-> **and** outcomes (what Sköll proved), and recce's report reflects both.
+> **and** outcomes (what fieldkit proved), and recce's report reflects both.
 
 ## Feed host topology back for a real reachability map
 
-Sköll's on-target triage scripts (`linpriv/enum.sh`, `winpriv/enum.bat`) emit a machine
+fieldkit's on-target triage scripts (`linpriv/enum.sh`, `winpriv/enum.bat`) emit a machine
 `NETWORK` block — this host's interfaces, routes, ARP neighbours and live TCP peers:
 
 ```
