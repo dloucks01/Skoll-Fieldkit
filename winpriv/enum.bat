@@ -65,6 +65,27 @@ echo   note: feed systeminfo to wesng -^> gen_winexploit.py localkernel   ^| Pri
 echo.
 
 echo ====================================================================================
+echo ===== NETWORK / ROUTING (this host) =====
+echo ====================================================================================
+echo --- interfaces ---
+ipconfig ^| findstr /i /c:"adapter" /c:"IPv4" /c:"Subnet" /c:"Default Gateway"
+echo --- routing table (gateways + the segments this host can reach) ---
+route print -4 2>nul ^| findstr /r /c:"Network Destination" /c:"^ *[0-9]"
+echo --- ARP neighbours (hosts this box has actually talked to) ---
+arp -a 2>nul ^| findstr /r /c:"^  [1-9]"
+echo # --- machine block (recce folds this into its reachability + architecture map) ---
+echo ==== NETWORK ====
+where powershell >nul 2>&1
+if !errorlevel!==0 (
+  powershell -NoProfile -NonInteractive -Command "Get-NetIPAddress -AddressFamily IPv4 -EA 0 | Where-Object {$_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*'} | ForEach-Object {'NET-IFACE '+($_.InterfaceAlias -replace ' ','_')+' '+$_.IPAddress+'/'+$_.PrefixLength}; Get-NetRoute -AddressFamily IPv4 -EA 0 | ForEach-Object {'NET-ROUTE '+$_.DestinationPrefix+' via '+$_.NextHop+' dev '+($_.InterfaceAlias -replace ' ','_')}; Get-NetNeighbor -AddressFamily IPv4 -EA 0 | Where-Object {($_.State -match 'Reachable|Stale|Permanent') -and $_.LinkLayerAddress} | ForEach-Object {'NET-NEIGH '+$_.IPAddress+' '+$_.LinkLayerAddress}; Get-NetTCPConnection -State Established -EA 0 | Where-Object {$_.RemoteAddress -notmatch ':' -and $_.RemoteAddress -notlike '127.*'} | ForEach-Object {'NET-PEER '+$_.RemoteAddress+':'+$_.RemotePort}"
+) else (
+  for /f "tokens=1,2" %%a in ('arp -a ^| findstr /r /c:"^  [1-9]"') do echo NET-NEIGH %%a %%b
+  for /f "tokens=2,3" %%a in ('netstat -n -p TCP ^| findstr "ESTABLISHED"') do echo NET-PEER %%b
+)
+echo ==== END NETWORK ====
+echo.
+
+echo ====================================================================================
 echo ===== FINDINGS SUMMARY =====
 echo ====================================================================================
 echo Counted !HITS! privilege/cred vector(s) above (the ==^> [#n] lines). Plus eyeball the

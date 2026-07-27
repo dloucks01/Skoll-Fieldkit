@@ -22,6 +22,12 @@ different thing — this is the part people mix up:
 
 **Many targets (e.g. 480 IPs)?** Start with `access/network/sweep.py plan` → run the scan → `access/network/sweep.py triage`.
 It ranks every host by quick-win and **names the exact module/generator per host** so you don't guess.
+(Or `sweep.py plan --oneshot > mass-scan.sh` emits a single runnable script that hits the whole scope in one kickoff.)
+
+> **Enumerated with [recce](https://github.com/dloucks01/recce)?** Skip the scan: run `recce skoll-export`
+> and feed its output straight in — `sweep.py triage --recce recce-bridge.json` ranks hosts using recce's
+> **confirmed** findings. Proven results flow back with `gen_report.py --export-recce` → `recce skoll-import`.
+> Full round-trip: [`INTEGRATION.md`](INTEGRATION.md).
 
 ## 2. After you have a shell — escalate
 | Shell on… | Module | First step |

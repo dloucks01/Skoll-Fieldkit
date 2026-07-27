@@ -26,6 +26,8 @@ The per-technique generators are **single-target by design** (actual exploitatio
 ```bash
 python3 sweep.py plan   --targets targets.txt        # prints the mass-scan sequence (nmap -iL · nxc <list> · nuclei -l)
 #   (run those; they read the whole list and drive the tools that natively accept a file/CIDR)
+python3 sweep.py plan   --targets targets.txt --oneshot > mass-scan.sh && sh mass-scan.sh   # ONE runnable
+#                                                            script that hits the whole scope in a single kickoff (nmap+nxc+nuclei)
 python3 sweep.py triage --nmap ports.gnmap --nxc smb.txt   # -> ranked SCOREBOARD: which hosts have quick-wins + which generator
 ```
 `triage` sorts every host by likely quick-win (exposed-RCE/unauth first) and names the generator per finding — so you focus the top of the list. **Spray and poisoning are also inherently multi-host** (`nxc smb <list>`, Responder is network-wide); only the exploitation chains are per-host.

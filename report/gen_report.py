@@ -13,6 +13,11 @@ Workflow:
 Options:
   -o <basename>        output basename (default: report)
   --formats md,docx,pdf   which to emit (default: all three)
+  --check              anti-fabrication gate (exit 2 on errors) — run before rendering
+  --cleanup            write the INTERNAL artifact-removal manifest
+  --export-recce [f]   emit a KB-enriched JSON (default recce_findings.json) to fold
+                       proven findings back into the recce workbook + report:
+                       recce skoll-import <f> -o <engagement>
 
 Each finding: { "title", "vector_type", "affected_host", "evidence",
                 "steps": [ {"cmd": "...", "output": "..."}, ... ],   # the PROOF: what you ran + what you saw
@@ -197,6 +202,56 @@ if "--cleanup" in sys.argv:
     outp = f"{out}.cleanup.md"
     open(outp, "w").write("\n".join(C) + "\n")
     print(f"wrote {outp}  (INTERNAL cleanup manifest — do not send to the client)")
+    sys.exit(0)
+
+# ---- --export-recce: enrich findings for the recce enumeration tool to fold back in ----
+# Writes a self-contained JSON (KB severity/CWE/remediation/risk resolved, host IP parsed out)
+# that recce imports with `recce skoll-import <file>` so every PROVEN finding lands back in
+# recce's workbook + report. Keeps the original finding fields and adds a `_recce` block per
+# finding, so recce needs no copy of this KB.
+if "--export-recce" in sys.argv:
+    import re as _re
+    def _parse_host(s):
+        s = (s or "").strip()
+        ipm = _re.search(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b", s)
+        ip = ipm.group(1) if ipm else ""
+        nm = _re.search(r"\(([^)]*)\)", s)
+        name = nm.group(1).split(",")[0].strip() if nm else ("" if ip else s)
+        return ip, name
+    enriched = []
+    for f in findings:
+        vt = f.get("vector_type", "")
+        k = kb_of(f)
+        ip, name = _parse_host(f.get("affected_host", ""))
+        cves = []
+        for tok in _re.split(r"[,\s]+", " ".join(str(x) for x in
+                             [k.get("refs", ""), f.get("references", "")] if x)):
+            tok = tok.strip().rstrip(".;,")
+            if tok.upper().startswith("CVE") and tok not in cves:
+                cves.append(tok)
+        g = dict(f)
+        g["_recce"] = {
+            "ip": ip, "hostname": name, "port": None,
+            "severity": sev_of(f).lower(),
+            "cwe": k.get("cwe", ""),
+            "cwes": [k["cwe"]] if k.get("cwe") else [],
+            "remediation": k.get("rem", ""),
+            "description": k.get("desc", ""),
+            "risk": RKB.risk_of(vt),
+            "confidence": "confirmed",
+            "ids": cves,
+        }
+        enriched.append(g)
+    # optional value: `--export-recce [path]` (path may be omitted / be the last arg)
+    _i = sys.argv.index("--export-recce")
+    dest = sys.argv[_i + 1] if _i + 1 < len(sys.argv) else ""
+    if not dest or dest.startswith("-"):
+        dest = "recce_findings.json"
+    payload = {"_recce_import": 1, "source": "skoll",
+               "engagement": eng, "findings": enriched}
+    json.dump(payload, open(dest, "w"), indent=2)
+    print(f"wrote {dest}  ({len(enriched)} finding(s), KB-enriched for recce)")
+    print(f"  fold into the recce workbook + report:  recce skoll-import {dest} -o <engagement>")
     sys.exit(0)
 
 # ---- render markdown ----

@@ -23,6 +23,8 @@ GodPotato / PrintSpoofer        drop-and-run a CVE exploit      → BUCKET 2 (ge
 ```bash
 sh enum.sh                 # the triage battery (read-only, safe). Or paste it line-by-line in a limited channel.
 # runs: sudo -l · SUID (find -perm -4000) · getcap · groups(docker/lxd) · kernel/sudo/pkexec/glibc/userns versions
+#       + a NETWORK/ROUTING section (interfaces, routing table, default gateway, ARP) and a machine
+#         NET-IFACE/NET-ROUTE/NET-NEIGH/NET-PEER block — feed it to `recce ingest` to map reachability + pivots
 ```
 **Check BUCKET 1 before BUCKET 2** — a SUID/sudo/cap win is instant and can't panic the box; a wrong kernel exploit can.
 **But check EVERYTHING, not just the first win.** A box usually has several privesc paths; `enum.sh` now prints a **FINDINGS SUMMARY** tallying every applicable vector. Exploit the safest first, but for an assessment **document them all** (each is a finding). After you're root, re-run — some vectors are only visible with elevated rights.
