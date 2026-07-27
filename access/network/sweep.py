@@ -7,8 +7,15 @@ generator that exploits it. Authorized scope ONLY — this scans your defined en
 Usage:
   python3 sweep.py plan   --targets targets.txt                 # print the mass-scan commands
   python3 sweep.py triage --nmap ports.gnmap [--nxc smb.txt]    # parse -> scoreboard (focus list)
+  python3 sweep.py triage --recce recce-bridge.json             # use recce's enumeration + CONFIRMED
+                                                                 #   findings (from `recce skoll-export`)
+
+The --recce feed comes from the companion enumeration tool: run `recce skoll-export -o <eng>` and
+point --recce at the emitted `skoll/recce-bridge.json`. It carries recce's open ports AND the
+vulnerabilities it already CONFIRMED, so the scoreboard floats proven quick-wins to the very top and
+annotates each host with what recce proved. It composes with --nmap/--nxc (union of both).
 """
-import sys, re
+import sys, re, json
 
 def opt(flag, default=None):
     return sys.argv[sys.argv.index(flag) + 1] if flag in sys.argv else default
@@ -70,18 +77,21 @@ if arg == "plan":
     print(f"# -> then:  python3 sweep.py triage --nmap ports.gnmap --nxc smb.txt")
 
 elif arg == "triage":
-    ng = opt("--nmap"); nxc = opt("--nxc")
-    if not ng:
-        print("need --nmap ports.gnmap (from `sweep.py plan` step 2)"); sys.exit(1)
-    # needs: --nmap = the greppable scan from `plan` step 2; --nxc (optional) = the SMB sweep from step 3.
+    ng = opt("--nmap"); nxc = opt("--nxc"); rc = opt("--recce")
+    if not ng and not rc:
+        print("need --nmap ports.gnmap (from `sweep.py plan` step 2) or --recce recce-bridge.json "
+              "(from `recce skoll-export`)"); sys.exit(1)
+    # needs: --nmap = the greppable scan from `plan` step 2; --nxc (optional) = the SMB sweep from step 3;
+    #        --recce (optional) = recce's enumeration + confirmed findings.
     hosts = {}   # ip -> {"name":.., "ports":set()}
-    for line in open(ng):
-        m = re.search(r"Host:\s+(\S+)\s+\(([^)]*)\)", line)
-        if not m or "Ports:" not in line: continue
-        ip, name = m.group(1), m.group(2)
-        h = hosts.setdefault(ip, {"name": name, "ports": set()})
-        for pm in re.finditer(r"(\d+)/open/", line):
-            h["ports"].add(int(pm.group(1)))
+    if ng:
+        for line in open(ng):
+            m = re.search(r"Host:\s+(\S+)\s+\(([^)]*)\)", line)
+            if not m or "Ports:" not in line: continue
+            ip, name = m.group(1), m.group(2)
+            h = hosts.setdefault(ip, {"name": name, "ports": set()})
+            for pm in re.finditer(r"(\d+)/open/", line):
+                h["ports"].add(int(pm.group(1)))
     # fold in nxc null-session hits (optional)
     null_shares = set()
     if nxc:
@@ -89,23 +99,57 @@ elif arg == "triage":
             if re.search(r"(READ|WRITE)", line) and "\\\\" in line or "Enumerated shares" in line:
                 mm = re.search(r"(\d+\.\d+\.\d+\.\d+)", line)
                 if mm: null_shares.add(mm.group(1))
-    # score each host = best (lowest) win among its ports
+    # fold in the recce bridge (optional): open ports + CONFIRMED findings per host.
+    recce = {}   # ip -> {"os":.., "roles":[..], "findings":[..], "access":bool}
+    SEVW = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+    if rc:
+        try:
+            data = json.load(open(rc))
+        except Exception as e:
+            print(f"cannot read {rc}: {e}"); sys.exit(1)
+        for e in data.get("hosts", []):
+            ip = e.get("ip")
+            if not ip: continue
+            h = hosts.setdefault(ip, {"name": e.get("hostname", ""), "ports": set()})
+            if not h["name"]: h["name"] = e.get("hostname", "")
+            for p in e.get("ports", []):
+                if p.get("port"): h["ports"].add(int(p["port"]))
+            if e.get("null_smb"): null_shares.add(ip)
+            recce[ip] = {"os": e.get("os", ""), "roles": e.get("roles", []),
+                         "findings": e.get("findings", []), "access": e.get("access_gained", False)}
+    # score each host = best (lowest) win among its ports; a recce-confirmed critical/high wins hard.
     rows = []
     for ip, h in hosts.items():
         wins = [(WINS[p][2], p, WINS[p]) for p in h["ports"] if p in WINS]
-        if not wins: continue
         wins.sort()
-        best = wins[0][0] - (1 if ip in null_shares else 0)   # null-session bumps priority
-        rows.append((best, ip, h["name"], wins, ip in null_shares))
+        rf = recce.get(ip, {}).get("findings", [])
+        top_find = min((SEVW.get(f.get("severity", "info"), 5) for f in rf), default=9)
+        if not wins and not rf:
+            continue                                       # nothing actionable on this host
+        base = wins[0][0] if wins else 3
+        best = base - (1 if ip in null_shares else 0) - (2 if top_find <= 1 else 0)
+        rows.append((best, ip, h["name"], wins, ip in null_shares, rf))
     rows.sort()
-    print(f"# TRIAGE SCOREBOARD — {len(hosts)} hosts scanned, {len(rows)} with a quick-win service. Focus top-down.\n")
-    for score, ip, name, wins, nulls in rows:
+    src = " + ".join(x for x in [("nmap" if ng else ""), ("recce" if rc else "")] if x)
+    print(f"# TRIAGE SCOREBOARD ({src}) — {len(hosts)} hosts, {len(rows)} with a quick-win. Focus top-down.\n")
+    for score, ip, name, wins, nulls, rf in rows:
         tag = " [NULL-SESSION]" if nulls else ""
+        if recce.get(ip, {}).get("access"): tag += " [ACCESS]"
+        info = recce.get(ip, {})
+        meta = " · ".join(x for x in [info.get("os", ""),
+                                      ("roles: " + ", ".join(info["roles"])) if info.get("roles") else ""] if x)
         print(f"═══ {ip}  {('('+name+')') if name else ''}{tag}")
+        if meta:
+            print(f"    {'':<6}{'':<12}{meta}")
+        for f in sorted(rf, key=lambda f: SEVW.get(f.get("severity", "info"), 5)):
+            cves = (" — " + ", ".join(f["cves"])) if f.get("cves") else ""
+            print(f"    {'CONFIRM':<6}{('['+f.get('severity','?').upper()+']'):<12}{f.get('title','')}{cves}")
         for _, p, (label, note, _j) in wins:
             print(f"    {p:<6}{label:<12}{note}")
     print(f"\n# -> ok: hosts are ranked top-down; the top rows are the exposed-RCE/unauth quick-wins to hit first.")
     print(f"# work the top of the list first (0=exposed-RCE/unauth, higher=needs-creds).")
+    if rc:
+        print(f"# CONFIRM lines = findings recce already PROVED — verify + exploit these first, then log -> report/.")
     print(f"# each line names the generator to run on that host. Log everything you confirm -> report/.")
 else:
     print("use: plan --targets <file> | triage --nmap <ports.gnmap> [--nxc <smb.txt>]"); sys.exit(1)
