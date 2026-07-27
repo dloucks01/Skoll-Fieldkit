@@ -3,6 +3,14 @@
 AMSI byte-patch + reflective load of the Potato exe from your HTTP stager + invoke revshell-as-SYSTEM.
 Edit LHOST/LPORT/TOOL in _winpriv_common.py. Serve the exe (python3 -m http.server 80) + nc -lvnp first.
 
+Note: the AMSI bypass in _winpriv_common.py is now randomised per build (see
+_winpriv_common.build_amsi()). Every fresh `python3 gen_full.py` run emits a
+different bypass blob, so the classic byte-signature match doesn't fire. If it
+still gets caught, the target is running a heuristic AMSI provider that matches
+the *pattern* (reflection into UnsafeNativeMethods + VirtualProtect + Copy), not
+just literal strings -- pivot to gen_forma (on-disk certutil, native PE, no AMSI
+in the load path).
+
 Usage: python3 gen_full.py
 """
 import _winpriv_common as P

