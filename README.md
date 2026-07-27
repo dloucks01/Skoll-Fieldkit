@@ -1,7 +1,6 @@
-# Sköll — engagement field kit
+# fieldkit
 
-*In Norse myth **Sköll** is the wolf that runs down the sun and brings on the dusk.* This is the field kit for
-the hours between first contact and full compromise.
+The field kit for the hours between first contact and full compromise.
 
 A deterministic, air-gap-friendly toolkit for **authorized** penetration testing and security assessments,
 covering the whole funnel: **initial access → privilege escalation → novel vuln research → reporting**.
