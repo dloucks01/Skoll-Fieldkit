@@ -14,7 +14,7 @@ whoami /priv
 echo.
 
 echo ===== [ROUTE 1] SeImpersonate / SeAssignPrimaryToken  (Potato -^> SYSTEM) =====
-whoami /priv | findstr /i "SeImpersonatePrivilege SeAssignPrimaryTokenPrivilege" >nul && (set /a HITS+=1 & echo   ==^> [#!HITS!] gen_full.py ^| gen_forma.py ^| gen_nonet.py   ^(Potato to SYSTEM^)) || echo   (not held)
+whoami /priv | findstr /i "SeImpersonatePrivilege SeAssignPrimaryTokenPrivilege" >nul && (set /a HITS+=1 & echo   ==^> [#!HITS!] gen_potato_scan.py   ^(auto-scan every staged Potato -- run this FIRST^) & echo        then: gen_full.py ^| gen_forma.py ^| gen_nonet.py   ^(with the winning TOOL^)) || echo   (not held)
 echo.
 
 echo ===== [ROUTE 4] SeBackup / SeRestore / Backup Operators  (hive dump) =====

