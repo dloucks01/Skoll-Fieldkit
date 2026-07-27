@@ -13,7 +13,7 @@ Which route fits is decided by `whoami /priv`, `whoami /groups`, and a service/D
 - **Every revshell calls back to `nc -lvnp 443`** on the attacker — **start the listener first, always.**
 
 ## STEP 0 — enumerate first (from your foothold)
-**One-shot:** paste **`enum.bat`** — it checks every route's precondition and prints `==> run <generator>` next to each hit (the self-recommending front door; read-only). Or run the checks by hand:
+**One-shot:** paste **`enum.bat`** — it checks every route's precondition and prints `==> run <generator>` next to each hit (the self-recommending front door; read-only). It also prints a **NETWORK/ROUTING** section (interfaces, routing table, default gateway, ARP) and a machine `NET-IFACE/NET-ROUTE/NET-NEIGH/NET-PEER` block — feed the output to `recce ingest` to map host-to-host reachability and dual-homed pivots. Or run the checks by hand:
 ```
 whoami /priv     → SeImpersonate/SeAssignPrimaryToken = ROUTE 1 · SeBackup/SeRestore = ROUTE 4
 whoami /groups   → "Backup Operators" = ROUTE 4 · "Administrators" but not elevated = fodhelper UAC (below)

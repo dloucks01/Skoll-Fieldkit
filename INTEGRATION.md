@@ -6,8 +6,10 @@ They round-trip cleanly, so you enumerate once and let each side feed the other:
 
 ```
 recce enum/vulns ──skoll-export──▶  Sköll sweep + generators  ──findings.json──▶ gen_report
-       ▲                                                                              │
-       └──────────────  recce skoll-import  ◀── gen_report.py --export-recce ─────────┘
+       ▲    ▲                                                                          │
+       │    └── recce ingest ◀── linpriv/winpriv enum NET-* block (interfaces/routes) ─┤
+       │        (topology → recce's reachability + architecture maps)                  │
+       └──────────────  recce skoll-import  ◀── gen_report.py --export-recce ──────────┘
         (proven findings land back in the recce workbook + report)
 ```
 
