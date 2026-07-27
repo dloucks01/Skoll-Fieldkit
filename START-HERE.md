@@ -3,6 +3,23 @@
 The toolkit is the full engagement funnel: **get in → escalate → report.** Pick a module by **what you found**,
 not by guessing. (Config once for the whole toolkit: `sh configure.sh <LHOST> <LPORT> [DOMAIN]`.)
 
+## 🚀 30-second orientation
+Every module below has a **"5-minute quick start"** section at the top of its `CHEATSHEET.md`. If you've never used this kit before, just:
+1. `sh configure.sh <YOUR_IP> <YOUR_PORT>` — sets LHOST/LPORT/DOMAIN toolkit-wide (once).
+2. Follow the table below to the module for what you found.
+3. Open that module's `CHEATSHEET.md` — the Quick Start at the top is a 5-command recipe.
+
+Front doors, per module:
+| Module | Front door (do this first) |
+|---|---|
+| `access/network/` | `python3 enum_net.py --target <ip>` (single) · `python3 sweep.py plan --targets ips.txt --oneshot` (many) |
+| `access/web/` | pick the bug class → `python3 gen_<sqli\|lfi\|rce\|upload\|ssrf\|smuggle\|jwt\|api>.py` |
+| `access/services/` | pick the open port → `python3 gen_<smb\|ftp\|db\|snmp\|nfs\|container\|remote>.py` |
+| `winpriv/` (Windows) | **`python3 winpriv.py --fire`** — one paste to SYSTEM shell |
+| `linpriv/` (Linux) | `sh enum.sh` on target → work the `==> gen_XXX.py` recommendations |
+| `report/` | `python3 gen_report.py findings.json` — MD + DOCX + PDF |
+| `novelre/` | `python3 gen_recon.py --binary <path>` — start of a novel-vuln workflow |
+
 ## 1. Getting IN — `access/` has three surfaces, and they DON'T overlap
 All of initial access lives under **`access/`**. All three surfaces end in a shell, but each attacks a
 different thing — this is the part people mix up:

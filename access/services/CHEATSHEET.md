@@ -1,6 +1,27 @@
 # access/services — anonymous / default / misconfig service access → shell
 > **Which access surface?** You're in `access/services/` — a **service left open** (anon/default/misconfig). Siblings: `../network/` (**cred / network / AD / cloud**) · `../web/` (a **web app**). (See `../../START-HERE.md`.)
 
+## 🚀 5-minute quick start — pick the open port, get a shell
+
+Beginner path — for each open service, one generator prints the abuse commands:
+
+```bash
+# 0) You know the open ports from `../network/enum_net.py --target <ip>`.
+#    Match them to a generator:
+
+python3 gen_smb.py       --target 10.0.0.5                 # 445: anon shares, null-session enum, unquoted paths
+python3 gen_ftp.py       --target 10.0.0.5                 # 21:  anon login, writable dirs, cred-less RCE (vsftpd/proftpd backdoors)
+python3 gen_db.py        --target 10.0.0.5 --dbms mssql    # 1433/3306/5432/27017: sa/root/anon + engine RCE (xp_cmdshell, UDF, JS)
+python3 gen_snmp.py      --target 10.0.0.5                 # 161: default community 'public', walk users/software (winexpl v1/v2c)
+python3 gen_nfs.py       --target 10.0.0.5                 # 2049: no_root_squash + rw exports -> root via SUID drop
+python3 gen_container.py --target 10.0.0.5                 # 2375 (docker.sock), 8080/6443/10250 (k8s), 6379 (redis) -> root RCE
+python3 gen_remote.py    --target 10.0.0.5 --proto rdp|vnc # 3389/5900: no-auth / weak-auth / BlueKeep / cred-stuff
+```
+
+**Every generator prints commands; nothing is fired for you.** Read the printed block, understand what it does, then paste. When you land RCE, drop a stable revshell → `../../winpriv/` (Windows) or `../../linpriv/` (Linux).
+
+**Order to work them:** `smb → db → docker → k8s → nfs → snmp → remote`. SMB null sessions and Docker Engine API expose creds instantly; the rest need more setup.
+
 **For each open port, the way in that needs NO cracked cred, NO CVE, and NO web app** — the low-hanging fruit
 checked on every engagement. Sister to `../network/` (creds/CVE/AD/cloud) and `../web/` (web app exploitation).
 Generators run on YOUR box and *print* commands; the shell/loot feeds the privesc kits + `report/`.

