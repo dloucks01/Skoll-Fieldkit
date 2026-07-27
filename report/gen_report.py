@@ -242,7 +242,9 @@ if "--export-recce" in sys.argv:
             "ids": cves,
         }
         enriched.append(g)
-    dest = opt("--export-recce")
+    # optional value: `--export-recce [path]` (path may be omitted / be the last arg)
+    _i = sys.argv.index("--export-recce")
+    dest = sys.argv[_i + 1] if _i + 1 < len(sys.argv) else ""
     if not dest or dest.startswith("-"):
         dest = "recce_findings.json"
     payload = {"_recce_import": 1, "source": "skoll",
