@@ -87,3 +87,15 @@ prove each finding.
 
 > The engagement now has one source of truth: recce's workbook tracks coverage (what was enumerated)
 > **and** outcomes (what Sköll proved), and recce's report reflects both.
+
+## Tests
+
+The two integration seams are smoke-tested (stdlib only — no pandoc/nmap/network needed):
+
+```bash
+python3 -m unittest discover -s tests      # from the repo root
+```
+
+`tests/test_integration_recce.py` drives `gen_report.py --export-recce` / `--check` and
+`sweep.py triage --recce` (plus the classic `--nmap` / `plan` paths) via subprocess and asserts on
+their output.
