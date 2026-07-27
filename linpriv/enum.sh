@@ -59,6 +59,26 @@ ls -la ~/.ssh 2>/dev/null; find / -name 'id_rsa' 2>/dev/null | head
 grep -rIE 'password|passwd|secret|api[_-]?key' /var/www /opt /home 2>/dev/null | head -15
 note "full sweep: gen_loot.py  |  exhaustive: gen_recon.py linpeas --fetch"
 
+echo "\n===== NETWORK (machine block — pipe this into recce: recce ingest <file>) ====="
+echo "# recce folds these into its OBSERVED-REACHABILITY map: this host's interfaces/"
+echo "# routes + the neighbours & live peers it actually reached (ground-truth lateral)."
+echo "==== NETWORK ===="
+if command -v ip >/dev/null 2>&1; then
+  ip -o -4 addr show 2>/dev/null | awk '{print "NET-IFACE "$2" "$4}'
+  ip -o route 2>/dev/null | awk '{d=$1;g="";v="";for(i=1;i<=NF;i++){if($i=="via")g=$(i+1);if($i=="dev")v=$(i+1)}printf "NET-ROUTE %s",d;if(g!="")printf " via %s",g;if(v!="")printf " dev %s",v;print ""}'
+  ip -o neigh 2>/dev/null | awk '/lladdr/{print "NET-NEIGH "$1" "$5}'
+else
+  ifconfig -a 2>/dev/null | awk '/inet .*netmask/{print "NET-IFACE if "$2"/24  # prefix approx (no ip(8))"}'
+  netstat -rn 2>/dev/null | awk 'NR>2 && $1 ~ /^[0-9]/{print "NET-ROUTE "$1" via "$2}'
+  arp -an 2>/dev/null | awk '{gsub(/[()]/,"",$2); if($2 ~ /^[0-9]/)print "NET-NEIGH "$2}'
+fi
+if command -v ss >/dev/null 2>&1; then
+  ss -tan 2>/dev/null | awk '/ESTAB/{print "NET-PEER "$5}'
+else
+  netstat -tan 2>/dev/null | awk '/ESTABLISHED/{print "NET-PEER "$5}'
+fi
+echo "==== END NETWORK ===="
+
 echo "\n===================================================================================="
 echo "===== FINDINGS SUMMARY — EVERY line below is a SEPARATE privesc vector ====="
 echo "===================================================================================="

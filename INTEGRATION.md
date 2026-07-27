@@ -88,6 +88,32 @@ prove each finding.
 > The engagement now has one source of truth: recce's workbook tracks coverage (what was enumerated)
 > **and** outcomes (what Sköll proved), and recce's report reflects both.
 
+## Feed host topology back for a real reachability map
+
+Sköll's on-target triage scripts (`linpriv/enum.sh`, `winpriv/enum.bat`) emit a machine
+`NETWORK` block — this host's interfaces, routes, ARP neighbours and live TCP peers:
+
+```
+==== NETWORK ====
+NET-IFACE eth0 10.0.20.5/24
+NET-ROUTE default via 10.0.20.1 dev eth0
+NET-NEIGH 10.0.10.10 aa:bb:cc:00:00:10
+NET-PEER 10.0.10.10:445 ESTAB
+==== END NETWORK ====
+```
+
+Bring that output back and fold it into recce:
+
+```bash
+recce ingest enum-output.txt --host <ip> -o eng
+```
+
+recce turns the ARP neighbours and live peers into a **ground-truth** host-to-host
+reachability map (`network-reachability.svg`, embedded in the report) — a link is drawn
+only because the compromised host *actually reached* the other end — and flags dual-homed
+**pivots** that bridge network segments. This is the real lateral-movement picture, from
+the inside, that an outside-in scan can never see.
+
 ## Tests
 
 The two integration seams are smoke-tested (stdlib only — no pandoc/nmap/network needed):
