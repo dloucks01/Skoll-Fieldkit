@@ -58,7 +58,7 @@ class ExportRecceTest(unittest.TestCase):
             self.assertEqual(rc, 0, o)
             self.assertTrue(os.path.exists(out))
             data = json.load(open(out))
-            self.assertEqual(data.get("source"), "skoll")
+            self.assertEqual(data.get("source"), "fieldkit")
             f = data["findings"][0]
             self.assertIn("_recce", f)
             r = f["_recce"]

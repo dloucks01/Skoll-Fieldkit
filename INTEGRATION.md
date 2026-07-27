@@ -5,11 +5,11 @@ is the **enumeration + reporting** half (multi-subnet nmap → one tracked Excel
 They round-trip cleanly, so you enumerate once and let each side feed the other:
 
 ```
-recce enum/vulns ──skoll-export──▶  fieldkit sweep + generators  ──findings.json──▶ gen_report
+recce enum/vulns ──fieldkit-export──▶  fieldkit sweep + generators  ──findings.json──▶ gen_report
        ▲    ▲                                                                          │
        │    └── recce ingest ◀── linpriv/winpriv enum NET-* block (interfaces/routes) ─┤
        │        (topology → recce's reachability + architecture maps)                  │
-       └──────────────  recce skoll-import  ◀── gen_report.py --export-recce ──────────┘
+       └──────────────  recce fieldkit-import  ◀── gen_report.py --export-recce ──────────┘
         (proven findings land back in the recce workbook + report)
 ```
 
@@ -24,14 +24,14 @@ engagements only.
 On the recce side, after `recce enum` / `recce vulns` (see recce's docs):
 
 ```bash
-recce skoll-export -o eng          # writes eng/skoll/
+recce fieldkit-export -o eng          # writes eng/fieldkit/
 ```
 
 That folder is the handoff. Copy it next to your fieldkit checkout and feed **the richest one** into
 mass triage:
 
 ```bash
-python3 access/network/sweep.py triage --recce eng/skoll/recce-bridge.json
+python3 access/network/sweep.py triage --recce eng/fieldkit/recce-bridge.json
 ```
 
 `--recce` uses recce's open ports **and the vulnerabilities it already confirmed**, so the
@@ -39,17 +39,17 @@ scoreboard floats proven quick-wins to the very top and annotates each host with
 (`CONFIRM [CRITICAL] …`) plus the exact generator to run. It composes with the classic inputs:
 
 ```bash
-python3 access/network/sweep.py triage --nmap eng/skoll/ports.gnmap --nxc eng/skoll/smb-null.txt
+python3 access/network/sweep.py triage --nmap eng/fieldkit/ports.gnmap --nxc eng/fieldkit/smb-null.txt
 ```
 
-| File in `eng/skoll/` | What it is | Consumed by |
+| File in `eng/fieldkit/` | What it is | Consumed by |
 |---|---|---|
 | `recce-bridge.json` | ports + service/version + recce's **confirmed** findings + suggested generator + ready `gen_exploit`/`gen_shell`/`gen_spray` commands per host | `sweep.py triage --recce` (richest) |
 | `ports.gnmap` | synthesized nmap-greppable (`-oG`) | `sweep.py triage --nmap` (zero-change path) |
 | `smb-null.txt` | netexec-style lines for null/anonymous SMB hosts | `sweep.py triage --nxc` |
 | `users.txt` | usernames recce enumerated (machine accounts dropped) | `gen_spray.py --users users.txt` |
 | `creds.txt` | credentials recce captured (`domain/user:secret` / `hash:`) | `gen_shell.py` (reference) |
-| `SKOLL.md` | human, severity-ranked "run **this** on **that** host, because …" plan | you |
+| `FIELDKIT.md` | human, severity-ranked "run **this** on **that** host, because …" plan | you |
 
 `sweep.py triage --recce` prints, under each host, not just the port→generator route but recce's
 **confirmed** findings and ready-to-paste commands it derived from what it enumerated:
@@ -79,10 +79,10 @@ parses the host IP out of `affected_host`, into a self-contained `recce_findings
 no copy of fieldkit's KB. Fold it in on the recce side:
 
 ```bash
-recce skoll-import recce_findings.json -o eng
+recce fieldkit-import recce_findings.json -o eng
 ```
 
-Every proven finding becomes a **confirmed** vulnerability in recce (source `skoll`) and lands in the
+Every proven finding becomes a **confirmed** vulnerability in recce (source `fieldkit`) and lands in the
 **Vulnerabilities** sheet, the HTML/Markdown report and the DOCX write-ups; the affected host is
 marked *access-gained*. Re-importing is idempotent (deduped by title+host), so you can run it as you
 prove each finding.

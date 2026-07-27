@@ -17,7 +17,7 @@ Options:
   --cleanup            write the INTERNAL artifact-removal manifest
   --export-recce [f]   emit a KB-enriched JSON (default recce_findings.json) to fold
                        proven findings back into the recce workbook + report:
-                       recce skoll-import <f> -o <engagement>
+                       recce fieldkit-import <f> -o <engagement>
 
 Each finding: { "title", "vector_type", "affected_host", "evidence",
                 "steps": [ {"cmd": "...", "output": "..."}, ... ],   # the PROOF: what you ran + what you saw
@@ -206,7 +206,7 @@ if "--cleanup" in sys.argv:
 
 # ---- --export-recce: enrich findings for the recce enumeration tool to fold back in ----
 # Writes a self-contained JSON (KB severity/CWE/remediation/risk resolved, host IP parsed out)
-# that recce imports with `recce skoll-import <file>` so every PROVEN finding lands back in
+# that recce imports with `recce fieldkit-import <file>` so every PROVEN finding lands back in
 # recce's workbook + report. Keeps the original finding fields and adds a `_recce` block per
 # finding, so recce needs no copy of this KB.
 if "--export-recce" in sys.argv:
@@ -247,11 +247,11 @@ if "--export-recce" in sys.argv:
     dest = sys.argv[_i + 1] if _i + 1 < len(sys.argv) else ""
     if not dest or dest.startswith("-"):
         dest = "recce_findings.json"
-    payload = {"_recce_import": 1, "source": "skoll",
+    payload = {"_recce_import": 1, "source": "fieldkit",
                "engagement": eng, "findings": enriched}
     json.dump(payload, open(dest, "w"), indent=2)
     print(f"wrote {dest}  ({len(enriched)} finding(s), KB-enriched for recce)")
-    print(f"  fold into the recce workbook + report:  recce skoll-import {dest} -o <engagement>")
+    print(f"  fold into the recce workbook + report:  recce fieldkit-import {dest} -o <engagement>")
     sys.exit(0)
 
 # ---- render markdown ----

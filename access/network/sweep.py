@@ -10,10 +10,10 @@ Usage:
       #   ... --oneshot > mass-scan.sh && sh mass-scan.sh        # one kickoff, whole scope
   python3 sweep.py triage --nmap ports.gnmap [--nxc smb.txt]    # parse -> scoreboard (focus list)
   python3 sweep.py triage --recce recce-bridge.json             # use recce's enumeration + CONFIRMED
-                                                                 #   findings (from `recce skoll-export`)
+                                                                 #   findings (from `recce fieldkit-export`)
 
-The --recce feed comes from the companion enumeration tool: run `recce skoll-export -o <eng>` and
-point --recce at the emitted `skoll/recce-bridge.json`. It carries recce's open ports AND the
+The --recce feed comes from the companion enumeration tool: run `recce fieldkit-export -o <eng>` and
+point --recce at the emitted `fieldkit/recce-bridge.json`. It carries recce's open ports AND the
 vulnerabilities it already CONFIRMED, so the scoreboard floats proven quick-wins to the very top and
 annotates each host with what recce proved. It composes with --nmap/--nxc (union of both).
 """
@@ -126,7 +126,7 @@ elif arg == "triage":
     ng = opt("--nmap"); nxc = opt("--nxc"); rc = opt("--recce")
     if not ng and not rc:
         print("need --nmap ports.gnmap (from `sweep.py plan` step 2) or --recce recce-bridge.json "
-              "(from `recce skoll-export`)"); sys.exit(1)
+              "(from `recce fieldkit-export`)"); sys.exit(1)
     # needs: --nmap = the greppable scan from `plan` step 2; --nxc (optional) = the SMB sweep from step 3;
     #        --recce (optional) = recce's enumeration + confirmed findings.
     hosts = {}   # ip -> {"name":.., "ports":set()}
