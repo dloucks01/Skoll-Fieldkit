@@ -1,0 +1,15 @@
+{
+  "name": "Gen1Recomp (Web)",
+  "short_name": "Gen1Recomp",
+  "description": "Native LÖVE2D recreation of Pokémon Red/Blue/Yellow, running in the browser. Bring your own legal ROM.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#000000",
+  "theme_color": "#0b5675",
+  "icons": [
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

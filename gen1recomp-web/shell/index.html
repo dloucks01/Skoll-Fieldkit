@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en-us">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>Gen1Recomp (Web)</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0b5675">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Gen1Recomp">
+  <link rel="apple-touch-icon" href="icon-512.png">
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden;
+      font-family: -apple-system, system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
+    #canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block;
+      outline: none; touch-action: none; background: #000; }
+    /* Loading + first-run overlay */
+    #overlay { position: fixed; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 18px; text-align: center;
+      background: #0b1622; color: #cfe6f4; padding: 24px; z-index: 10; }
+    #overlay h1 { font-size: 20px; margin: 0; letter-spacing: .5px; }
+    #status { font-size: 14px; opacity: .8; min-height: 18px; }
+    .btn { -webkit-appearance: none; appearance: none; border: 0; border-radius: 12px;
+      padding: 16px 22px; font-size: 17px; font-weight: 700; color: #06222f;
+      background: #58c3e3; cursor: pointer; }
+    .btn:active { transform: translateY(1px); }
+    .hint { font-size: 12px; opacity: .65; max-width: 320px; line-height: 1.4; }
+    /* Small floating ROM button, present during play to add Blue/Yellow */
+    #romFab { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 8px); right: 8px;
+      z-index: 9; background: rgba(11,34,47,.82); color: #cfe6f4; border: 1px solid #2a6f86;
+      border-radius: 10px; padding: 8px 12px; font-size: 13px; font-weight: 600;
+      display: none; }
+    #toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom,0px) + 16px);
+      transform: translateX(-50%); background: rgba(6,34,47,.92); color: #dff1fb;
+      padding: 10px 16px; border-radius: 10px; font-size: 14px; z-index: 11;
+      opacity: 0; transition: opacity .25s; pointer-events: none; max-width: 90vw; }
+    #toast.show { opacity: 1; }
+    input[type=file] { display: none; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+
+  <div id="overlay">
+    <h1>Gen1&thinsp;Recomp &mdash; Web</h1>
+    <div id="status">Loading engine&hellip;</div>
+    <button id="romBtn" class="btn" style="display:none">Choose ROM (.gb / .gbc)</button>
+    <div class="hint" id="hint" style="display:none">
+      Pick a clean US Pok&eacute;mon Red, Blue, or Yellow ROM (1&nbsp;MiB). It is verified
+      on-device, decoded into a private cache, then discarded &mdash; nothing is uploaded.
+      Your import and saves stay in this browser and work offline.
+    </div>
+  </div>
+
+  <button id="romFab">＋ ROM</button>
+  <div id="toast"></div>
+  <input type="file" id="romInput" accept=".gb,.gbc,application/octet-stream">
+
+  <script>
+    // ---- ROM drop path: the Lua web shim (RomImporter:_pollWebRom) reads this
+    // exact absolute path via io.open, so JS and Lua agree on one location.
+    var ROM_DROP_PATH = "/home/web_user/gen1_romdrop.gb";
+
+    var statusEl = document.getElementById('status');
+    var overlay  = document.getElementById('overlay');
+    var romBtn   = document.getElementById('romBtn');
+    var romFab   = document.getElementById('romFab');
+    var hint     = document.getElementById('hint');
+    var romInput = document.getElementById('romInput');
+    var toastEl  = document.getElementById('toast');
+    var toastTimer;
+    function toast(msg) {
+      toastEl.textContent = msg; toastEl.classList.add('show');
+      clearTimeout(toastTimer); toastTimer = setTimeout(function(){ toastEl.classList.remove('show'); }, 3200);
+    }
+
+    // Size the drawing buffer to the device so rendering is crisp, not scaled.
+    var canvas = document.getElementById('canvas');
+    function sizeCanvas() {
+      var dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width  = Math.round(window.innerWidth  * dpr);
+      canvas.height = Math.round(window.innerHeight * dpr);
+    }
+    sizeCanvas();
+
+    // ---- emscripten / LÖVE (love.js) module bootstrap ----------------------
+    var Module = {
+      arguments: ["./game.love"],
+      INITIAL_MEMORY: 536870912,
+      printErr: (function(){ var f = console.error.bind(console); return f; })(),
+      canvas: canvas,
+      setStatus: function(text) {
+        if (text) statusEl.textContent = text.replace('Downloading', 'Loading');
+      },
+      totalDependencies: 0,
+      monitorRunDependencies: function(left) {
+        this.totalDependencies = Math.max(this.totalDependencies, left);
+        if (left) statusEl.textContent = 'Loading… (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')';
+      }
+    };
+    window.Module = Module;
+
+    // Reveal the ROM picker once the engine has finished starting.
+    var runReady = false;
+    function whenRunning(cb) {
+      if (Module.calledRun) return cb();
+      var prev = Module.onRuntimeInitialized;
+      Module.onRuntimeInitialized = function(){ if (prev) prev(); cb(); };
+      // calledRun may already be set without the hook; poll as a fallback.
+      var t = setInterval(function(){ if (Module.calledRun) { clearInterval(t); cb(); } }, 200);
+    }
+    function showPicker() {
+      if (runReady) return; runReady = true;
+      statusEl.textContent = 'Ready.';
+      romBtn.style.display = 'inline-block';
+      hint.style.display = 'block';
+      romFab.style.display = 'block';
+    }
+
+    // ---- ROM file selection -> write to the emscripten FS -------------------
+    function deliverRom(file) {
+      var reader = new FileReader();
+      reader.onload = function() {
+        try {
+          var bytes = new Uint8Array(reader.result);
+          if (!Module.FS) { toast('Engine not ready yet — try again.'); return; }
+          Module.FS.writeFile(ROM_DROP_PATH, bytes);
+          overlay.style.display = 'none';         // hand the screen to the game
+          toast('Importing ' + file.name + '…');
+        } catch (e) { toast('Could not load file: ' + e.message); }
+      };
+      reader.onerror = function(){ toast('Could not read that file.'); };
+      reader.readAsArrayBuffer(file);
+    }
+    romInput.addEventListener('change', function(){
+      if (romInput.files && romInput.files[0]) deliverRom(romInput.files[0]);
+      romInput.value = '';
+    });
+    romBtn.addEventListener('click', function(){ romInput.click(); });
+    romFab.addEventListener('click', function(){ romInput.click(); });
+
+    // Drag-and-drop (desktop browsers) as a convenience.
+    window.addEventListener('dragover', function(e){ e.preventDefault(); });
+    window.addEventListener('drop', function(e){
+      e.preventDefault();
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) deliverRom(e.dataTransfer.files[0]);
+    });
+
+    // ---- Save persistence: flush IDBFS -> IndexedDB -------------------------
+    // love.js mounts IDBFS at /home/web_user/love (the LÖVE save dir lives
+    // under it) and populates it at boot, but never writes back on its own.
+    // Flush periodically and whenever the page is backgrounded/closed so the
+    // imported game cache and battery saves survive a reload.
+    function persist() {
+      try {
+        if (Module && Module.calledRun && Module.FS && Module.FS.syncfs) {
+          Module.FS.syncfs(false, function(){});
+        }
+      } catch (e) { /* ignore */ }
+    }
+    setInterval(persist, 5000);
+    document.addEventListener('visibilitychange', function(){ if (document.hidden) persist(); });
+    window.addEventListener('pagehide', persist);
+    window.addEventListener('beforeunload', persist);
+
+    whenRunning(showPicker);
+
+    // ---- PWA service worker (offline) --------------------------------------
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function(){
+        navigator.serviceWorker.register('sw.js').catch(function(){});
+      });
+    }
+
+    var applicationLoad = function(){ Love(Module); };
+  </script>
+  <script type="text/javascript" src="game.js"></script>
+  <script async type="text/javascript" src="love.js" onload="applicationLoad(this)"></script>
+</body>
+</html>
