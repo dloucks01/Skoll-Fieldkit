@@ -1,7 +1,0 @@
-# Build transients
-node_modules/
-dist/
-.gen1recomp/
-game.love
-package.json
-package-lock.json
