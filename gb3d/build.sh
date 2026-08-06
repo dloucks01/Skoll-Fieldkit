@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build the Gen1Recomp Web (love.js) app into an offline-capable static site.
+# Build the gb3d web app (Gen1Recomp in the browser) into an offline-capable
+# static site.
 #
 # It packs the gen1recomp engine into game.love, runs it through love.js
 # (prebuilt LÖVE-on-WebAssembly, no emscripten toolchain needed), applies the
@@ -7,15 +8,14 @@
 # picker + PWA + IDBFS save flushing).
 #
 # Usage:
-#   scripts/build.sh                 # clone gen1recomp @ pin, patch, build
-#   GEN1_SRC=/path/to/gen1recomp scripts/build.sh   # use an existing checkout
+#   ./build.sh                       # clone gen1recomp @ pin, patch, build
+#   GEN1_SRC=/path/to/gen1recomp ./build.sh   # use an existing checkout
+#   ./build.sh --pages               # also refresh docs/ for GitHub Pages
 #
-# Output: gen1recomp-web/dist/ (also copied to repo docs/ for GitHub Pages when
-#         --pages is passed).
+# Output: dist/ (and docs/ with --pages).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$HERE/.." && pwd)"
 DIST="$HERE/dist"
 SHELL_DIR="$HERE/shell"
 PATCH="$HERE/patches/gen1recomp-web.patch"
@@ -59,7 +59,7 @@ bash "$SRC/scripts/pack_love.sh" --output "$HERE/game.love" >/dev/null
 #    cross-origin-isolation headers.
 say "running love.js (compatibility, ${MEM} bytes)"
 rm -rf "$DIST"
-"$HERE/node_modules/.bin/love.js" -c -m "$MEM" -t "Gen1Recomp" "$HERE/game.love" "$DIST" >/dev/null 2>&1
+"$HERE/node_modules/.bin/love.js" -c -m "$MEM" -t "gb3d" "$HERE/game.love" "$DIST" >/dev/null 2>&1
 
 # 5. Expose the emscripten FS on Module so the shell can hand the picked ROM to
 #    the Lua importer (love.js does not export FS by default).
@@ -69,19 +69,19 @@ grep -q 'Module\["FS"\]=FS;' "$DIST/love.js" || { echo "error: FS-expose patch d
 
 # 6. Install the mobile shell (replaces love.js's default index.html).
 say "installing shell (ROM picker + PWA + save flush)"
-cp "$SHELL_DIR/index.html"          "$DIST/index.html"
+cp "$SHELL_DIR/index.html"           "$DIST/index.html"
 cp "$SHELL_DIR/manifest.webmanifest" "$DIST/manifest.webmanifest"
-cp "$SHELL_DIR/sw.js"               "$DIST/sw.js"
-cp "$SHELL_DIR/icon-512.png"        "$DIST/icon-512.png"
+cp "$SHELL_DIR/sw.js"                "$DIST/sw.js"
+cp "$SHELL_DIR/icon-512.png"         "$DIST/icon-512.png"
 
 say "build complete: $DIST ($(du -sh "$DIST" | cut -f1))"
 
-# 7. Optionally stage into repo docs/ for GitHub Pages (deploy-from-branch).
+# 7. Optionally stage into docs/ for GitHub Pages (deploy-from-branch).
 if [ "$PAGES" = "1" ]; then
   say "staging into docs/ for GitHub Pages"
-  rm -rf "$REPO_ROOT/docs"
-  mkdir -p "$REPO_ROOT/docs"
-  cp -R "$DIST/." "$REPO_ROOT/docs/"
-  touch "$REPO_ROOT/docs/.nojekyll"   # keep Pages from hiding files, serve as-is
+  rm -rf "$HERE/docs"
+  mkdir -p "$HERE/docs"
+  cp -R "$DIST/." "$HERE/docs/"
+  touch "$HERE/docs/.nojekyll"
   say "docs/ ready"
 fi
